@@ -2,23 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Moderator - Master Version</title>
+  <title>Werewolf Multiplayer Moderator</title>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+  
   <style>
     body { 
       background-color: #1a1a2e; color: white; font-family: sans-serif;
       display: flex; flex-direction: column; align-items: center; 
       justify-content: center; min-height: 100vh; margin: 0; transition: background 2s;
     }
-    .container { text-align: center; width: 90%; max-width: 500px; }
+    .container { text-align: center; width: 90%; max-width: 500px; padding: 20px; }
     
-    /* Card Styles */
+    /* Role Card Styles */
     .card {
       width: 180px; height: 260px; background: #16213e; border: 3px solid #e94560;
       border-radius: 15px; display: flex; align-items: center; justify-content: center;
       cursor: pointer; font-size: 1.5rem; margin: 20px auto;
     }
 
-    /* Player List & Buttons */
+    /* Player List & Action Buttons */
     .player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
     .player-btn { 
       padding: 15px; background: #1a1a2e; border: 2px solid #4e9af1; 
@@ -34,6 +37,7 @@
     #timerDisplay { font-size: 3rem; color: #e94560; margin: 10px; }
     #mainAction { padding: 15px 30px; font-size: 1rem; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; }
     .hidden { display: none !important; }
+    .morning-text { color: #1a1a2e; font-weight: bold; font-size: 1.2rem; }
   </style>
 </head>
 <body>
@@ -44,7 +48,7 @@
     <div id="setupArea">
       <p id="instruction">Tap the card to see your role</p>
       <div class="card" id="roleCard" onclick="revealRole()">?</div>
-      <button id="mainAction" class="hidden" onclick="startNight()">START NIGHT PHASE</button>
+      <button id="mainAction" class="hidden" onclick="syncPhase('NIGHT')">START NIGHT PHASE</button>
     </div>
 
     <div id="nightArea" class="hidden">
@@ -60,65 +64,147 @@
     </div>
 
     <div id="morningArea" class="hidden">
-      <h2 id="morningNews">Checking survivors...</h2>
+      <h2 id="morningNews" class="morning-text">Checking survivors...</h2>
       <div id="hunterZone" class="hidden">
-        <p>🎯 The Hunter was killed! Take a shot!</p>
+        <p class="morning-text">🎯 The Hunter was killed! Take a shot!</p>
         <div id="hunterTargets" class="player-list"></div>
       </div>
     </div>
-
   </div>
 
-
   <script>
+    // --- 1. FIREBASE CONFIGURATION ---
+    // PASTE YOUR ACTUAL FIREBASE CONFIG HERE
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+    };
 
-<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
 
-<script>
-  // 1. Your web app's Firebase configuration (Copy this from Firebase Console)
-  const firebaseConfig = {
-    apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
-  authDomain: "werewolfgame-7386c.firebaseapp.com",
-  projectId: "werewolfgame-7386c",
-  storageBucket: "werewolfgame-7386c.firebasestorage.app",
-  messagingSenderId: "37154052928",
-  appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
-  measurementId: "G-1VYE9RRKVJ"
-  };
+    // --- 2. GAME VARIABLES ---
+    const players = ["Alice", "Bob", "Charlie", "David", "Eve"];
+    let playerRole = "";
+    let timeLeft = 30;
+    let timerInterval;
 
-  // 2. Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  const database = firebase.database();
-
-  // 3. The "Multiplayer" Logic
-  function startNight() {
-    // Instead of just changing your own screen, 
-    // we tell the database: "The game state is now NIGHT"
-    database.ref('gameState').set({
-      phase: "NIGHT",
-      timestamp: Date.now()
-    });
-  }
-
-  // 4. THE MAGIC: This listens for changes from OTHER players
-  database.ref('gameState').on('value', (snapshot) => {
-    const data = snapshot.val();
-    
-    if (data.phase === "NIGHT") {
-      // Every player's phone will execute this code at the same time!
-      triggerNightUI();
+    function speak(msg) {
+      const u = new SpeechSynthesisUtterance(msg);
+      u.pitch = 0.8; u.rate = 0.9;
+      window.speechSynthesis.speak(u);
     }
-  });
 
-  function triggerNightUI() {
-    document.getElementById('setupArea').classList.add('hidden');
-    document.getElementById('nightArea').classList.remove('hidden');
-    document.body.style.backgroundColor = "black";
-    speak("The village falls asleep...");
-  }
-</script>    
+    // --- 3. MULTIPLAYER SYNC ---
+    function syncPhase(newPhase) {
+      database.ref('gameState').set({
+        phase: newPhase,
+        timestamp: Date.now()
+      });
+    }
 
+    // Listen for changes from the database
+    database.ref('gameState').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      if (data.phase === "NIGHT") startNightUI();
+      if (data.phase === "MORNING") endNightUI();
+    });
+
+    // --- 4. GAME LOGIC ---
+    function revealRole() {
+      const roles = ["WEREWOLF", "SEER", "WITCH", "HUNTER", "VILLAGER"];
+      playerRole = roles[Math.floor(Math.random() * roles.length)];
+      document.getElementById('roleCard').innerHTML = playerRole;
+      document.getElementById('mainAction').classList.remove('hidden');
+    }
+
+    function startNightUI() {
+      document.getElementById('setupArea').classList.add('hidden');
+      document.getElementById('nightArea').classList.remove('hidden');
+      document.body.style.backgroundColor = "black";
+      speak("The village falls asleep. Everyone close your eyes.");
+      setTimeout(wolfTurn, 3000);
+    }
+
+    function wolfTurn() {
+      speak("Werewolves, wake up.");
+      document.getElementById('roleInstruction').innerText = "Werewolves choosing...";
+      createPlayerButtons();
+      startTimer(15, seerTurn);
+    }
+
+    function seerTurn() {
+      speak("Seer, wake up.");
+      startTimer(10, witchTurn);
+    }
+
+    function witchTurn() {
+      speak("Witch, wake up.");
+      document.getElementById('playerInteraction').classList.add('hidden');
+      document.getElementById('witchUI').classList.remove('hidden');
+      startTimer(15, () => syncPhase("MORNING"));
+    }
+
+    function witchAction(type) {
+      document.getElementById('witchUI').classList.add('hidden');
+      if (type === 'poison') {
+        document.getElementById('playerInteraction').classList.remove('hidden');
+      }
+      speak("Action confirmed.");
+    }
+
+    function endNightUI() {
+      document.getElementById('nightArea').classList.add('hidden');
+      document.getElementById('morningArea').classList.remove('hidden');
+      document.body.style.backgroundColor = "#f3f4f6";
+      speak("The sun rises. David has died.");
+      document.getElementById('morningNews').innerText = "David was found dead.";
+      
+      // Hunter Revenge Mockup
+      setTimeout(() => {
+        document.getElementById('hunterZone').classList.remove('hidden');
+        createHunterButtons();
+      }, 3000);
+    }
+
+    // --- 5. HELPERS ---
+    function createPlayerButtons() {
+      const area = document.getElementById('playerInteraction');
+      area.innerHTML = ""; area.classList.remove('hidden');
+      players.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = "player-btn";
+        btn.innerText = p;
+        btn.onclick = () => speak("Target: " + p);
+        area.appendChild(btn);
+      });
+    }
+
+    function createHunterButtons() {
+      const area = document.getElementById('hunterTargets');
+      players.slice(0, 3).forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = "player-btn"; btn.innerText = "Shoot " + p;
+        btn.onclick = () => alert("Shot fired!");
+        area.appendChild(btn);
+      });
+    }
+
+    function startTimer(seconds, nextFunc) {
+      clearInterval(timerInterval);
+      timeLeft = seconds;
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timerDisplay').innerText = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          nextFunc();
+        }
+      }, 1000);
+    }
   </script>
 </body>
 </html>
