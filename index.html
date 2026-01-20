@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Pro - Persistence & Audio</title>
+  <title>Werewolf Pro - Host Dashboard</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
@@ -12,11 +12,14 @@
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
     button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; transition: 0.2s; }
-    .player-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
+    .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
+    .dead { text-decoration: line-through; color: #555 !important; }
+    .host-kill-btn { background: #555; font-size: 0.7rem; padding: 5px; }
     .leave-btn { background: #555; font-size: 0.7rem; position: absolute; top: 10px; right: 10px; padding: 5px 10px; }
     #roomBadge { font-size: 2.5rem; color: #4e9af1; font-weight: bold; letter-spacing: 5px; margin: 10px 0; }
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
     .night-mode { background: #000000 !important; }
+    .dead-overlay { color: #e94560; font-weight: bold; font-size: 2rem; }
   </style>
 </head>
 <body>
@@ -41,7 +44,7 @@
       <select id="wolfCount">
         <option value="1">1</option><option value="2">2</option><option value="3">3</option>
       </select>
-      <div style="text-align: left; margin: 10px 20%; font-size: 0.9rem;">
+      <div style="text-align: left; margin: 10px 20%; font-size: 0.8rem;">
         <label><input type="checkbox" id="includeSeer" checked> Seer</label><br>
         <label><input type="checkbox" id="includeWitch" checked> Witch</label><br>
         <label><input type="checkbox" id="includeHunter" checked> Hunter</label>
@@ -58,9 +61,22 @@
   </div>
 
   <div id="gamePanel" class="panel hidden">
-    <h2 id="gameStatus">Your Role</h2>
-    <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
-    <p id="roleDesc">Keep it secret!</p>
+    <div id="roleView">
+      <h2 id="gameStatus">Your Role</h2>
+      <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
+      <p id="roleDesc">Keep it secret!</p>
+    </div>
+    
+    <div id="hostDashboard" class="hidden">
+      <hr>
+      <h3>Host Control Panel</h3>
+      <div id="hostPlayerList"></div>
+    </div>
+
+    <div id="deadMessage" class="hidden">
+      <h1 class="dead-overlay">YOU ARE DEAD</h1>
+      <p>Please stay quiet and enjoy the show.</p>
+    </div>
   </div>
 
   <script>
@@ -77,25 +93,17 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let currentRoom = null;
-    let myPlayerId = null;
-    let isHost = false;
-    let currentRole = "Unknown";
-    let heartbeatInterval;
+    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", heartbeatInterval;
 
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
+      const savedHost = localStorage.getItem('werewolf_isHost');
       if (savedRoom && savedId) {
-        database.ref(`rooms/${savedRoom}`).once('value', (snap) => {
-          if (snap.exists()) {
-            currentRoom = savedRoom;
-            myPlayerId = savedId;
-            setupListeners(savedRoom);
-          } else {
-            localStorage.clear();
-          }
-        });
+        currentRoom = savedRoom;
+        myPlayerId = savedId;
+        isHost = (savedHost === "true");
+        setupListeners(savedRoom);
       }
     };
 
@@ -104,14 +112,10 @@
       heartbeatInterval = setInterval(() => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'sine';
         osc.frequency.setValueAtTime(60, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.5);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.5);
       }, 1000);
     }
 
@@ -120,10 +124,8 @@
       const name = prompt("Enter your name:");
       if (!name) return;
       isHost = true;
-      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => {
-        addPlayerToRoom(code, name);
-        document.getElementById('hostControls').classList.remove('hidden');
-      });
+      localStorage.setItem('werewolf_isHost', "true");
+      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
     }
 
     function joinGame() {
@@ -131,37 +133,40 @@
       const name = prompt("Enter your name:");
       if (!name || !code) return;
       database.ref('rooms/' + code).once('value', (snap) => {
-        if (snap.exists()) {
-          addPlayerToRoom(code, name);
-          document.getElementById('playerStatus').classList.remove('hidden');
-        } else {
-          alert("Room not found!");
-        }
+        if (snap.exists()) addPlayerToRoom(code, name);
+        else alert("Room not found!");
       });
     }
 
     function addPlayerToRoom(code, name) {
       currentRoom = code;
       const playersRef = database.ref('rooms/' + code + '/players');
-      
-      // Fix: Get count first, then add player to ensure Seat 1
       playersRef.once('value', (snap) => {
         const seatNum = (snap.numChildren() || 0) + 1;
         const playerRef = playersRef.push();
         myPlayerId = playerRef.key;
-        
         localStorage.setItem('werewolf_room', code);
         localStorage.setItem('werewolf_id', myPlayerId);
-
-        playerRef.set({ name: name, seat: seatNum, role: "Waiting..." });
+        playerRef.set({ name: name, seat: seatNum, role: "Waiting...", status: "ALIVE" });
         setupListeners(code);
       });
     }
 
     function setupListeners(code) {
       showLobby(code);
+      if (isHost) document.getElementById('hostControls').classList.remove('hidden');
+      else document.getElementById('playerStatus').classList.remove('hidden');
+
       database.ref('rooms/' + code + '/players').on('value', (snap) => {
-        updatePlayerList(snap.val());
+        const players = snap.val();
+        updatePlayerList(players);
+        if (isHost) updateHostDashboard(players);
+        
+        // Check if I am dead
+        if (players && players[myPlayerId] && players[myPlayerId].status === "DEAD") {
+          document.getElementById('roleView').classList.add('hidden');
+          document.getElementById('deadMessage').classList.remove('hidden');
+        }
       });
 
       database.ref('rooms/' + code + '/status').on('value', (snap) => {
@@ -169,8 +174,6 @@
           database.ref('rooms/' + code + '/players/' + myPlayerId + '/role').once('value', (rSnap) => {
             currentRole = rSnap.val();
             showGame();
-            document.body.classList.add('night-mode');
-            playHeartbeat();
           });
         }
       });
@@ -180,11 +183,30 @@
       const listDiv = document.getElementById('playerList');
       listDiv.innerHTML = "<h4>Players Joined:</h4>";
       for (let id in players) {
-        listDiv.innerHTML += `<div class="player-row">
-          <span>Seat ${players[id].seat}</span>
-          <span>${players[id].name}</span>
+        const p = players[id];
+        listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
+          <span>Seat ${p.seat}: ${p.name}</span>
         </div>`;
       }
+    }
+
+    function updateHostDashboard(players) {
+      const dash = document.getElementById('hostPlayerList');
+      dash.innerHTML = "";
+      for (let id in players) {
+        const p = players[id];
+        dash.innerHTML += `<div class="player-row">
+          <span>${p.name} (${p.role})</span>
+          <button class="host-kill-btn" onclick="toggleLife('${id}', '${p.status}')">
+            ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
+          </button>
+        </div>`;
+      }
+    }
+
+    function toggleLife(pid, currentStatus) {
+      const newStatus = (currentStatus === "ALIVE") ? "DEAD" : "ALIVE";
+      database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(newStatus);
     }
 
     function showLobby(code) {
@@ -205,10 +227,9 @@
         if(document.getElementById('includeWitch').checked) roles.push("WITCH");
         if(document.getElementById('includeHunter').checked) roles.push("HUNTER");
         while(roles.length < playerIds.length) roles.push("VILLAGER");
-        
         roles.sort(() => Math.random() - 0.5);
         playerIds.forEach((id, index) => {
-          database.ref('rooms/' + currentRoom + '/players/' + id + '/role').set(roles[index]);
+          database.ref(`rooms/${currentRoom}/players/${id}/role`).set(roles[index]);
         });
         database.ref('rooms/' + currentRoom + '/status').set("PLAYING");
       });
@@ -217,6 +238,9 @@
     function showGame() {
       document.getElementById('lobbyPanel').classList.add('hidden');
       document.getElementById('gamePanel').classList.remove('hidden');
+      document.body.classList.add('night-mode');
+      if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
+      playHeartbeat();
     }
 
     function revealRoleOnCard() {
@@ -226,9 +250,9 @@
     }
 
     function leaveGame() {
-      if (confirm("Leave this game?")) {
+      if (confirm("Leave game?")) {
         clearInterval(heartbeatInterval);
-        database.ref('rooms/' + currentRoom + '/players/' + myPlayerId).remove();
+        database.ref(`rooms/${currentRoom}/players/${myPlayerId}`).remove();
         localStorage.clear();
         location.reload();
       }
