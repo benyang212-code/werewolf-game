@@ -2,79 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Multiplayer Moderator</title>
+  <title>Werewolf Moderator - Full Lobby</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
   <style>
-    body { 
-      background-color: #1a1a2e; color: white; font-family: sans-serif;
-      display: flex; flex-direction: column; align-items: center; 
-      justify-content: center; min-height: 100vh; margin: 0; transition: background 2s;
-    }
-    .container { text-align: center; width: 90%; max-width: 500px; padding: 20px; }
-    
-    /* Role Card Styles */
-    .card {
-      width: 180px; height: 260px; background: #16213e; border: 3px solid #e94560;
-      border-radius: 15px; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 1.5rem; margin: 20px auto;
-    }
-
-    /* Player List & Action Buttons */
-    .player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
-    .player-btn { 
-      padding: 15px; background: #1a1a2e; border: 2px solid #4e9af1; 
-      color: white; border-radius: 8px; cursor: pointer;
-    }
-
-    /* Witch Controls */
-    .witch-controls { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-    .witch-btn { padding: 10px 20px; border-radius: 5px; cursor: pointer; border: none; font-weight: bold; color: white; }
-    .save { background: #2ecc71; }
-    .poison { background: #e74c3c; }
-
-    #timerDisplay { font-size: 3rem; color: #e94560; margin: 10px; }
-    #mainAction { padding: 15px 30px; font-size: 1rem; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; }
+    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
     .hidden { display: none !important; }
-    .morning-text { color: #1a1a2e; font-weight: bold; font-size: 1.2rem; }
+    .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
+    input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
+    button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; transition: 0.2s; }
+    button:hover { background: #ff4d6d; }
+    .player-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
+    .leave-btn { background: #555; font-size: 0.7rem; position: absolute; top: 10px; right: 10px; padding: 5px 10px; }
+    #roomBadge { font-size: 2.5rem; color: #4e9af1; font-weight: bold; letter-spacing: 5px; margin: 10px 0; }
+    .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <h1 id="status">Lobby</h1>
+  <button id="leaveBtn" class="leave-btn hidden" onclick="leaveGame()">Leave Game</button>
+
+  <div id="landingPanel" class="panel">
+    <h1>WEREWOLF</h1>
+    <button onclick="createGame()">Create New Game</button>
+    <hr style="border: 0; border-top: 1px solid #4e9af1; margin: 20px 0;">
+    <input type="text" id="joinCode" placeholder="Enter 4-Letter Code">
+    <button onclick="joinGame()">Join Game</button>
+  </div>
+
+  <div id="lobbyPanel" class="panel hidden">
+    <p>Room Code:</p>
+    <div id="roomBadge">----</div>
     
-    <div id="setupArea">
-      <p id="instruction">Tap the card to see your role</p>
-      <div class="card" id="roleCard" onclick="revealRole()">?</div>
-      <button id="mainAction" class="hidden" onclick="syncPhase('NIGHT')">START NIGHT PHASE</button>
-    </div>
-
-    <div id="nightArea" class="hidden">
-      <div id="timerDisplay">30</div>
-      <p id="roleInstruction"></p>
-      
-      <div id="playerInteraction" class="player-list hidden"></div>
-
-      <div id="witchUI" class="witch-controls hidden">
-        <button class="witch-btn save" onclick="witchAction('save')">SAVE VICTIM</button>
-        <button class="witch-btn poison" onclick="witchAction('poison')">USE POISON</button>
+    <div id="hostControls" class="hidden">
+      <h3>Game Settings</h3>
+      <label>Werewolves: </label>
+      <select id="wolfCount">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+      </select>
+      <div style="text-align: left; margin: 10px 20%; font-size: 0.9rem;">
+        <label><input type="checkbox" id="includeSeer" checked> Seer</label><br>
+        <label><input type="checkbox" id="includeWitch" checked> Witch</label><br>
+        <label><input type="checkbox" id="includeHunter" checked> Hunter</label>
       </div>
+      <button onclick="assignRolesAndStart()">DEAL ROLES & START</button>
     </div>
 
-    <div id="morningArea" class="hidden">
-      <h2 id="morningNews" class="morning-text">Checking survivors...</h2>
-      <div id="hunterZone" class="hidden">
-        <p class="morning-text">🎯 The Hunter was killed! Take a shot!</p>
-        <div id="hunterTargets" class="player-list"></div>
-      </div>
+    <div id="playerStatus" class="hidden">
+      <h3>Waiting for host...</h3>
     </div>
+
+    <hr style="border: 0; border-top: 1px solid #4e9af1;">
+    <div id="playerList"></div>
+  </div>
+
+  <div id="gamePanel" class="panel hidden">
+    <h2 id="gameStatus">Identify Yourself</h2>
+    <div class="card" id="myRoleCard">TAP TO REVEAL</div>
+    <p id="roleDesc"></p>
   </div>
 
   <script>
-    // --- 1. FIREBASE CONFIGURATION ---
-    // PASTE YOUR ACTUAL FIREBASE CONFIG HERE
+    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -85,130 +75,141 @@
   appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
   measurementId: "G-1VYE9RRKVJ"
     };
-
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // --- 2. GAME VARIABLES ---
-    const players = ["Alice", "Bob", "Charlie", "David", "Eve"];
-    let playerRole = "";
-    let timeLeft = 30;
-    let timerInterval;
+    let currentRoom = null;
+    let myPlayerId = null;
+    let isHost = false;
 
-    function speak(msg) {
-      const u = new SpeechSynthesisUtterance(msg);
-      u.pitch = 0.8; u.rate = 0.9;
-      window.speechSynthesis.speak(u);
-    }
+    // --- LOBBY & JOINING ---
 
-    // --- 3. MULTIPLAYER SYNC ---
-    function syncPhase(newPhase) {
-      database.ref('gameState').set({
-        phase: newPhase,
-        timestamp: Date.now()
+    function createGame() {
+      const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const name = prompt("Enter your name:");
+      if (!name) return;
+
+      isHost = true;
+      currentRoom = code;
+      const initialData = {
+        hostId: "", 
+        status: "LOBBY",
+        settings: { wolves: 1, seer: true, witch: true, hunter: true }
+      };
+
+      database.ref('rooms/' + code).set(initialData).then(() => {
+        addPlayerToRoom(code, name);
+        document.getElementById('hostControls').classList.remove('hidden');
+        showLobby(code);
       });
     }
 
-    // Listen for changes from the database
-    database.ref('gameState').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
+    function joinGame() {
+      const code = document.getElementById('joinCode').value.toUpperCase();
+      const name = prompt("Enter your name:");
+      if (!name || !code) return;
 
-      if (data.phase === "NIGHT") startNightUI();
-      if (data.phase === "MORNING") endNightUI();
-    });
-
-    // --- 4. GAME LOGIC ---
-    function revealRole() {
-      const roles = ["WEREWOLF", "SEER", "WITCH", "HUNTER", "VILLAGER"];
-      playerRole = roles[Math.floor(Math.random() * roles.length)];
-      document.getElementById('roleCard').innerHTML = playerRole;
-      document.getElementById('mainAction').classList.remove('hidden');
-    }
-
-    function startNightUI() {
-      document.getElementById('setupArea').classList.add('hidden');
-      document.getElementById('nightArea').classList.remove('hidden');
-      document.body.style.backgroundColor = "black";
-      speak("The village falls asleep. Everyone close your eyes.");
-      setTimeout(wolfTurn, 3000);
-    }
-
-    function wolfTurn() {
-      speak("Werewolves, wake up.");
-      document.getElementById('roleInstruction').innerText = "Werewolves choosing...";
-      createPlayerButtons();
-      startTimer(15, seerTurn);
-    }
-
-    function seerTurn() {
-      speak("Seer, wake up.");
-      startTimer(10, witchTurn);
-    }
-
-    function witchTurn() {
-      speak("Witch, wake up.");
-      document.getElementById('playerInteraction').classList.add('hidden');
-      document.getElementById('witchUI').classList.remove('hidden');
-      startTimer(15, () => syncPhase("MORNING"));
-    }
-
-    function witchAction(type) {
-      document.getElementById('witchUI').classList.add('hidden');
-      if (type === 'poison') {
-        document.getElementById('playerInteraction').classList.remove('hidden');
-      }
-      speak("Action confirmed.");
-    }
-
-    function endNightUI() {
-      document.getElementById('nightArea').classList.add('hidden');
-      document.getElementById('morningArea').classList.remove('hidden');
-      document.body.style.backgroundColor = "#f3f4f6";
-      speak("The sun rises. David has died.");
-      document.getElementById('morningNews').innerText = "David was found dead.";
-      
-      // Hunter Revenge Mockup
-      setTimeout(() => {
-        document.getElementById('hunterZone').classList.remove('hidden');
-        createHunterButtons();
-      }, 3000);
-    }
-
-    // --- 5. HELPERS ---
-    function createPlayerButtons() {
-      const area = document.getElementById('playerInteraction');
-      area.innerHTML = ""; area.classList.remove('hidden');
-      players.forEach(p => {
-        const btn = document.createElement('button');
-        btn.className = "player-btn";
-        btn.innerText = p;
-        btn.onclick = () => speak("Target: " + p);
-        area.appendChild(btn);
-      });
-    }
-
-    function createHunterButtons() {
-      const area = document.getElementById('hunterTargets');
-      players.slice(0, 3).forEach(p => {
-        const btn = document.createElement('button');
-        btn.className = "player-btn"; btn.innerText = "Shoot " + p;
-        btn.onclick = () => alert("Shot fired!");
-        area.appendChild(btn);
-      });
-    }
-
-    function startTimer(seconds, nextFunc) {
-      clearInterval(timerInterval);
-      timeLeft = seconds;
-      timerInterval = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timerDisplay').innerText = timeLeft;
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          nextFunc();
+      database.ref('rooms/' + code).once('value', (snap) => {
+        if (snap.exists()) {
+          currentRoom = code;
+          addPlayerToRoom(code, name);
+          document.getElementById('playerStatus').classList.remove('hidden');
+          showLobby(code);
+        } else {
+          alert("Room not found!");
         }
-      }, 1000);
+      });
+    }
+
+    function addPlayerToRoom(code, name) {
+      const playerRef = database.ref('rooms/' + code + '/players').push();
+      myPlayerId = playerRef.key;
+      
+      // Assign seat number based on order
+      database.ref('rooms/' + code + '/players').once('value', (snap) => {
+        const seat = snap.numChildren();
+        playerRef.set({ name: name, seat: seat, role: "Waiting..." });
+      });
+
+      // Listen for players
+      database.ref('rooms/' + code + '/players').on('value', (snap) => {
+        updatePlayerList(snap.val());
+      });
+
+      // Listen for game status and my role
+      database.ref('rooms/' + code + '/status').on('value', (snap) => {
+        if (snap.val() === "PLAYING") {
+          database.ref('rooms/' + code + '/players/' + myPlayerId + '/role').once('value', (rSnap) => {
+            showGame(rSnap.val());
+          });
+        }
+      });
+    }
+
+    function updatePlayerList(players) {
+      const listDiv = document.getElementById('playerList');
+      listDiv.innerHTML = "<h4>Players:</h4>";
+      for (let id in players) {
+        listDiv.innerHTML += `<div class="player-row">
+          <span>#${players[id].seat}</span>
+          <span>${players[id].name}</span>
+          <span>${isHost ? 'OK' : ''}</span>
+        </div>`;
+      }
+    }
+
+    function showLobby(code) {
+      document.getElementById('landingPanel').classList.add('hidden');
+      document.getElementById('lobbyPanel').classList.remove('hidden');
+      document.getElementById('leaveBtn').classList.remove('hidden');
+      document.getElementById('roomBadge').innerText = code;
+    }
+
+    // --- ROLE ASSIGNMENT LOGIC ---
+
+    function assignRolesAndStart() {
+      database.ref('rooms/' + currentRoom + '/players').once('value', (snap) => {
+        const playersData = snap.val();
+        const playerIds = Object.keys(playersData);
+        const playerCount = playerIds.length;
+
+        // Build Role Pool based on settings
+        let roles = [];
+        const wolves = parseInt(document.getElementById('wolfCount').value);
+        for(let i=0; i<wolves; i++) roles.push("WEREWOLF");
+        if(document.getElementById('includeSeer').checked) roles.push("SEER");
+        if(document.getElementById('includeWitch').checked) roles.push("WITCH");
+        if(document.getElementById('includeHunter').checked) roles.push("HUNTER");
+        
+        while(roles.length < playerCount) roles.push("VILLAGER");
+        
+        // Shuffle roles
+        roles.sort(() => Math.random() - 0.5);
+
+        // Assign to database
+        playerIds.forEach((id, index) => {
+          database.ref('rooms/' + currentRoom + '/players/' + id + '/role').set(roles[index]);
+        });
+
+        // Set Game Status to trigger UI for everyone
+        database.ref('rooms/' + currentRoom + '/status').set("PLAYING");
+      });
+    }
+
+    function showGame(role) {
+      document.getElementById('lobbyPanel').classList.add('hidden');
+      document.getElementById('gamePanel').classList.remove('hidden');
+      document.getElementById('myRoleCard').onclick = () => {
+        document.getElementById('myRoleCard').innerText = role;
+        document.getElementById('myRoleCard').style.background = (role === "WEREWOLF") ? "#e94560" : "#4e9af1";
+      };
+    }
+
+    function leaveGame() {
+      if (currentRoom && myPlayerId) {
+        database.ref('rooms/' + currentRoom + '/players/' + myPlayerId).remove();
+        location.reload();
+      }
     }
   </script>
 </body>
