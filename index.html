@@ -2,31 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Pro - Master Moderator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Werewolf Pro - Secure Host</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
   <style>
-    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; transition: background 2s; }
+    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; transition: background 1s; }
     .hidden { display: none !important; }
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
-    button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; transition: 0.2s; }
-    button:hover { background: #ff4d6d; }
+    button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; }
     
-    /* Room Sticky Header */
-    #roomSticky { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; border: 1px solid #4e9af1; font-weight: bold; font-size: 0.9rem; z-index: 100; }
+    #roomSticky { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; border: 1px solid #4e9af1; font-size: 0.8rem; z-index: 100; }
+    .leave-btn { background: #555; font-size: 0.7rem; position: fixed; top: 10px; right: 10px; padding: 8px 15px; border-radius: 20px; z-index: 100; }
     
     .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
-    .dead { text-decoration: line-through; color: #555 !important; }
-    .host-kill-btn { background: #555; font-size: 0.7rem; padding: 5px; }
-    .leave-btn { background: #555; font-size: 0.7rem; position: fixed; top: 10px; right: 10px; padding: 8px 15px; border-radius: 20px; z-index: 100; }
-    #roomBadge { font-size: 2.5rem; color: #4e9af1; font-weight: bold; letter-spacing: 5px; margin: 10px 0; }
-    .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
-    .night-mode { background: #000000 !important; }
-    .dead-overlay { color: #e94560; font-weight: bold; font-size: 2rem; margin-top: 50px; }
+    .dead { text-decoration: line-through; color: #ff4d6d !important; opacity: 0.6; }
     
-    .settings-grid { text-align: left; margin: 10px auto; max-width: 250px; font-size: 0.9rem; }
+    .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
+    .night-mode { background: #050510 !important; }
+    
+    .host-btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 10px; }
+    .btn-secondary { background: #4e9af1; font-size: 0.8rem; }
+    .btn-danger { background: #555; font-size: 0.8rem; }
   </style>
 </head>
 <body>
@@ -43,29 +42,21 @@
   </div>
 
   <div id="lobbyPanel" class="panel hidden">
-    <p>Room Code:</p>
-    <div id="roomBadge">----</div>
+    <h2>LOBBY</h2>
+    <div id="roomBadge" style="font-size: 2rem; color: #4e9af1; letter-spacing: 3px;">----</div>
     
     <div id="hostControls" class="hidden">
-      <h3>Host Settings</h3>
-      <div class="settings-grid">
-        <label>Werewolves: </label>
-        <select id="wolfCount" style="width: 50px; padding: 5px;">
-          <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-        </select>
-        <br><br>
-        <label><input type="checkbox" id="includeSeer" checked> Include Seer</label><br>
-        <label><input type="checkbox" id="includeWitch" checked> Include Witch</label><br>
-        <label><input type="checkbox" id="includeHunter" checked> Include Hunter</label><br>
+      <div style="text-align: left; display: inline-block; margin: 15px 0;">
+        <label>Wolves: <select id="wolfCount" style="width: 50px;"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label><br>
+        <label><input type="checkbox" id="includeSeer" checked> Seer</label><br>
+        <label><input type="checkbox" id="includeWitch" checked> Witch</label><br>
+        <label><input type="checkbox" id="includeHunter" checked> Hunter</label><br>
         <label><input type="checkbox" id="hostIsPlaying" checked> Host is Playing</label>
-      </div>
+      </div><br>
       <button onclick="assignRolesAndStart()">DEAL & START</button>
     </div>
 
-    <div id="playerStatus" class="hidden">
-      <h3>Waiting for host...</h3>
-    </div>
-
+    <div id="playerStatus" class="hidden"><h3>Waiting for host...</h3></div>
     <hr style="border: 0; border-top: 1px solid #4e9af1;">
     <div id="playerList"></div>
   </div>
@@ -74,18 +65,20 @@
     <div id="roleView">
       <h2 id="gameStatus">Your Role</h2>
       <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
-      <p id="roleDesc">Keep it secret from others!</p>
+    </div>
+
+    <div id="deadMessage" class="hidden">
+      <h1 style="color: #e94560;">YOU ARE DEAD</h1>
     </div>
     
     <div id="hostDashboard" class="hidden">
       <hr>
-      <h3>Moderator Dashboard</h3>
-      <div id="hostPlayerList"></div>
-    </div>
-
-    <div id="deadMessage" class="hidden">
-      <h1 class="dead-overlay">YOU ARE DEAD</h1>
-      <p>Stay silent for the remainder of the round.</p>
+      <h3>Host Tools</h3>
+      <div class="host-btn-group">
+        <button class="btn-secondary" onclick="toggleRoleVisibility()">Show/Hide Secret Roles</button>
+        <button class="btn-danger" onclick="resetGame()">Reset Room</button>
+      </div>
+      <div id="hostPlayerList" style="margin-top: 15px;"></div>
     </div>
   </div>
 
@@ -104,15 +97,14 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown";
+    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false;
 
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
       const savedHost = localStorage.getItem('werewolf_isHost');
       if (savedRoom && savedId) {
-        currentRoom = savedRoom;
-        myPlayerId = savedId;
+        currentRoom = savedRoom; myPlayerId = savedId;
         isHost = (savedHost === "true");
         setupListeners(savedRoom);
       }
@@ -122,8 +114,7 @@
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
       const name = prompt("Enter host name:");
       if (!name) return;
-      isHost = true;
-      localStorage.setItem('werewolf_isHost', "true");
+      isHost = true; localStorage.setItem('werewolf_isHost', "true");
       database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
     }
 
@@ -156,102 +147,109 @@
       document.getElementById('stickyCode').innerText = code;
       document.getElementById('roomSticky').classList.remove('hidden');
       document.getElementById('landingPanel').classList.add('hidden');
-      document.getElementById('lobbyPanel').classList.remove('hidden');
       document.getElementById('leaveBtn').classList.remove('hidden');
 
-      if (isHost) document.getElementById('hostControls').classList.remove('hidden');
-      else document.getElementById('playerStatus').classList.remove('hidden');
+      database.ref('rooms/' + code).on('value', (snap) => {
+        const data = snap.val();
+        if (!data) return;
 
-      database.ref('rooms/' + code + '/players').on('value', (snap) => {
-        const players = snap.val();
-        updatePlayerList(players);
-        if (isHost) updateHostDashboard(players);
-        
-        if (players && players[myPlayerId]) {
-          if (players[myPlayerId].status === "DEAD") {
+        if (data.status === "LOBBY") {
+          document.getElementById('lobbyPanel').classList.remove('hidden');
+          document.getElementById('gamePanel').classList.add('hidden');
+          document.body.classList.remove('night-mode');
+          if (isHost) document.getElementById('hostControls').classList.remove('hidden');
+          else document.getElementById('playerStatus').classList.remove('hidden');
+        } else {
+          document.getElementById('lobbyPanel').classList.add('hidden');
+          document.getElementById('gamePanel').classList.remove('hidden');
+          document.body.classList.add('night-mode');
+          if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
+          
+          const me = data.players[myPlayerId];
+          currentRole = me.role;
+          if (me.status === "DEAD") {
             document.getElementById('roleView').classList.add('hidden');
             document.getElementById('deadMessage').classList.remove('hidden');
-          }
-          if (players[myPlayerId].role === "MODERATOR") {
-             document.getElementById('roleView').classList.add('hidden');
+          } else {
+            document.getElementById('roleView').classList.toggle('hidden', me.role === "MODERATOR");
+            document.getElementById('deadMessage').classList.add('hidden');
           }
         }
-      });
-
-      database.ref('rooms/' + code + '/status').on('value', (snap) => {
-        if (snap.val() === "PLAYING") showGame();
+        updatePlayerUI(data.players);
       });
     }
 
-    function updatePlayerList(players) {
+    function updatePlayerUI(players) {
       const listDiv = document.getElementById('playerList');
+      const hostDiv = document.getElementById('hostPlayerList');
       listDiv.innerHTML = "<h4>Players Joined:</h4>";
+      hostDiv.innerHTML = "";
+
       for (let id in players) {
         const p = players[id];
         listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
           <span>Seat ${p.seat}: ${p.name}</span>
         </div>`;
+
+        if (isHost) {
+          const roleDisplay = rolesVisible ? p.role : "???";
+          hostDiv.innerHTML += `<div class="player-row">
+            <span>${p.name} (${roleDisplay})</span>
+            <button class="btn-secondary" style="padding:5px;" onclick="toggleLife('${id}', '${p.status}')">
+              ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
+            </button>
+          </div>`;
+        }
       }
     }
 
-    function updateHostDashboard(players) {
-      const dash = document.getElementById('hostPlayerList');
-      dash.innerHTML = "";
-      for (let id in players) {
-        const p = players[id];
-        dash.innerHTML += `<div class="player-row">
-          <span>${p.name} <small>(${p.role})</small></span>
-          <button class="host-kill-btn" onclick="toggleLife('${id}', '${p.status}')">
-            ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
-          </button>
-        </div>`;
-      }
+    function toggleRoleVisibility() {
+      rolesVisible = !rolesVisible;
+      database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => updatePlayerUI(snap.val()));
     }
 
     function toggleLife(pid, currentStatus) {
-      const newStatus = (currentStatus === "ALIVE") ? "DEAD" : "ALIVE";
-      database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(newStatus);
+      database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(currentStatus === "ALIVE" ? "DEAD" : "ALIVE");
+    }
+
+    function resetGame() {
+      if (confirm("Reset game? All roles and deaths will be cleared.")) {
+        database.ref(`rooms/${currentRoom}/status`).set("LOBBY");
+        database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => {
+          const players = snap.val();
+          for (let id in players) {
+            database.ref(`rooms/${currentRoom}/players/${id}`).update({
+              role: "Waiting...",
+              status: "ALIVE"
+            });
+          }
+        });
+      }
     }
 
     function assignRolesAndStart() {
       const hostIsPlaying = document.getElementById('hostIsPlaying').checked;
-      const numWolves = parseInt(document.getElementById('wolfCount').value);
-      
-      database.ref('rooms/' + currentRoom + '/players').once('value', (snap) => {
+      database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => {
         const playersData = snap.val();
-        const playerIds = Object.keys(playersData);
-        let roles = [];
-        let assignableIds = [...playerIds];
+        const ids = Object.keys(playersData);
+        let roles = [], poolIds = [...ids];
 
         if (!hostIsPlaying) {
           database.ref(`rooms/${currentRoom}/players/${myPlayerId}/role`).set("MODERATOR");
-          assignableIds = assignableIds.filter(id => id !== myPlayerId);
+          poolIds = poolIds.filter(id => id !== myPlayerId);
         }
 
-        // Fill Role Pool
-        for(let i=0; i<numWolves; i++) roles.push("WEREWOLF");
+        for(let i=0; i<document.getElementById('wolfCount').value; i++) roles.push("WEREWOLF");
         if(document.getElementById('includeSeer').checked) roles.push("SEER");
         if(document.getElementById('includeWitch').checked) roles.push("WITCH");
         if(document.getElementById('includeHunter').checked) roles.push("HUNTER");
+        while(roles.length < poolIds.length) roles.push("VILLAGER");
         
-        while(roles.length < assignableIds.length) roles.push("VILLAGER");
         roles.sort(() => Math.random() - 0.5);
-
-        assignableIds.forEach((id, index) => {
+        poolIds.forEach((id, index) => {
           database.ref(`rooms/${currentRoom}/players/${id}/role`).set(roles[index]);
         });
-
-        database.ref('rooms/' + currentRoom + '/status').set("PLAYING");
-      });
-    }
-
-    function showGame() {
-      database.ref(`rooms/${currentRoom}/players/${myPlayerId}/role`).once('value', (snap) => {
-        currentRole = snap.val();
-        document.getElementById('lobbyPanel').classList.add('hidden');
-        document.getElementById('gamePanel').classList.remove('hidden');
-        document.body.classList.add('night-mode');
-        if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
+        database.ref(`rooms/${currentRoom}/status`).set("PLAYING");
       });
     }
 
@@ -264,8 +262,7 @@
     function leaveGame() {
       if (confirm("Leave game?")) {
         database.ref(`rooms/${currentRoom}/players/${myPlayerId}`).remove();
-        localStorage.clear();
-        location.reload();
+        localStorage.clear(); location.reload();
       }
     }
   </script>
