@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Pro - Persistent Edition</title>
+  <title>Werewolf Pro - Persistence & Audio</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
   <style>
-    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; transition: background 2s; }
     .hidden { display: none !important; }
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
@@ -16,6 +16,7 @@
     .leave-btn { background: #555; font-size: 0.7rem; position: absolute; top: 10px; right: 10px; padding: 5px 10px; }
     #roomBadge { font-size: 2.5rem; color: #4e9af1; font-weight: bold; letter-spacing: 5px; margin: 10px 0; }
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
+    .night-mode { background: #000000 !important; }
   </style>
 </head>
 <body>
@@ -80,18 +81,16 @@
     let myPlayerId = null;
     let isHost = false;
     let currentRole = "Unknown";
+    let heartbeatInterval;
 
-    // --- AUTO REJOIN LOGIC ---
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
-      
       if (savedRoom && savedId) {
         database.ref(`rooms/${savedRoom}`).once('value', (snap) => {
           if (snap.exists()) {
             currentRoom = savedRoom;
             myPlayerId = savedId;
-            // Check if I was the host (simple version: first player is usually host)
             setupListeners(savedRoom);
           } else {
             localStorage.clear();
@@ -99,6 +98,22 @@
         });
       }
     };
+
+    function playHeartbeat() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      heartbeatInterval = setInterval(() => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(60, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      }, 1000);
+    }
 
     function createGame() {
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -108,7 +123,6 @@
       database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => {
         addPlayerToRoom(code, name);
         document.getElementById('hostControls').classList.remove('hidden');
-        showLobby(code);
       });
     }
 
@@ -120,7 +134,6 @@
         if (snap.exists()) {
           addPlayerToRoom(code, name);
           document.getElementById('playerStatus').classList.remove('hidden');
-          showLobby(code);
         } else {
           alert("Room not found!");
         }
@@ -129,26 +142,24 @@
 
     function addPlayerToRoom(code, name) {
       currentRoom = code;
-      const playerRef = database.ref('rooms/' + code + '/players').push();
-      myPlayerId = playerRef.key;
+      const playersRef = database.ref('rooms/' + code + '/players');
       
-      // Save to localStorage
-      localStorage.setItem('werewolf_room', code);
-      localStorage.setItem('werewolf_id', myPlayerId);
+      // Fix: Get count first, then add player to ensure Seat 1
+      playersRef.once('value', (snap) => {
+        const seatNum = (snap.numChildren() || 0) + 1;
+        const playerRef = playersRef.push();
+        myPlayerId = playerRef.key;
+        
+        localStorage.setItem('werewolf_room', code);
+        localStorage.setItem('werewolf_id', myPlayerId);
 
-      // Seat numbering fix: starts from 1
-      database.ref('rooms/' + code + '/players').once('value', (snap) => {
-        const seat = snap.numChildren(); 
-        playerRef.set({ name: name, seat: seat, role: "Waiting..." });
+        playerRef.set({ name: name, seat: seatNum, role: "Waiting..." });
+        setupListeners(code);
       });
-
-      setupListeners(code);
     }
 
     function setupListeners(code) {
-      currentRoom = code;
       showLobby(code);
-      
       database.ref('rooms/' + code + '/players').on('value', (snap) => {
         updatePlayerList(snap.val());
       });
@@ -158,6 +169,8 @@
           database.ref('rooms/' + code + '/players/' + myPlayerId + '/role').once('value', (rSnap) => {
             currentRole = rSnap.val();
             showGame();
+            document.body.classList.add('night-mode');
+            playHeartbeat();
           });
         }
       });
@@ -214,6 +227,7 @@
 
     function leaveGame() {
       if (confirm("Leave this game?")) {
+        clearInterval(heartbeatInterval);
         database.ref('rooms/' + currentRoom + '/players/' + myPlayerId).remove();
         localStorage.clear();
         location.reload();
