@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Werewolf Pro - Night Fall Edition</title>
+  <title>Werewolf Pro - Master Moderator</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
@@ -17,13 +17,13 @@
     #roomSticky { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; border: 1px solid #4e9af1; font-size: 0.8rem; z-index: 100; }
     .leave-btn { background: #555; font-size: 0.7rem; position: fixed; top: 10px; right: 10px; padding: 8px 15px; border-radius: 20px; z-index: 100; }
     
-    #timerDisplay { font-size: 3.5rem; color: #ff4d6d; font-weight: bold; margin: 10px 0; text-shadow: 0 0 10px rgba(233, 69, 96, 0.5); }
+    #timerDisplay { font-size: 3rem; color: #ff4d6d; font-weight: bold; margin: 5px 0; }
     .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
     .dead { text-decoration: line-through; color: #ff4d6d !important; opacity: 0.6; }
     
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
     .night-mode { background: #050510 !important; }
-    .your-turn { border: 4px solid #4e9af1 !important; box-shadow: 0 0 20px #4e9af1; }
+    .your-turn { border: 5px solid #4e9af1 !important; box-shadow: 0 0 20px #4e9af1; }
   </style>
 </head>
 <body>
@@ -60,7 +60,7 @@
 
   <div id="gamePanel" class="panel hidden">
     <div id="timerDisplay" class="hidden">00</div>
-    <div id="phaseText" style="font-weight: bold; color: #4e9af1;">Day Phase</div>
+    <div id="phaseText" style="font-weight: bold; color: #4e9af1; margin-bottom: 10px;">Day Phase</div>
 
     <div id="roleView">
       <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
@@ -73,8 +73,8 @@
     <div id="hostDashboard" class="hidden">
       <hr>
       <button onclick="startNightSequence()" style="background:#4e9af1">🌙 START NIGHT FALL</button>
-      <div class="host-btn-group" style="margin-top:10px;">
-        <button onclick="toggleRoleVisibility()" style="font-size:0.7rem; background:#555">Show Roles</button>
+      <div style="margin-top:10px;">
+        <button onclick="toggleRoleVisibility()" style="font-size:0.7rem; background:#555">Show/Hide Roles</button>
         <button onclick="resetGame()" style="font-size:0.7rem; background:#555">Reset Room</button>
       </div>
       <div id="hostPlayerList" style="margin-top: 15px;"></div>
@@ -82,7 +82,6 @@
   </div>
 
   <script>
-    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -98,7 +97,6 @@
 
     let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false, timerInt;
 
-    // --- VOICE HELPER ---
     function announce(text) {
       window.speechSynthesis.cancel();
       const msg = new SpeechSynthesisUtterance(text);
@@ -175,7 +173,6 @@
           const me = data.players[myPlayerId];
           currentRole = me.role;
           
-          // Handle Night Phase UI
           updateNightUI(data.nightPhase, data.phaseEndTime);
 
           if (me.status === "DEAD") {
@@ -205,14 +202,12 @@
       timerDiv.classList.remove('hidden');
       phaseText.innerText = phase + " TURN";
       
-      // Highlight card if it's my turn
       if ((currentRole === "WEREWOLF" && phase === "WEREWOLVES") || currentRole === phase) {
         card.classList.add('your-turn');
       } else {
         card.classList.remove('your-turn');
       }
 
-      // Timer Logic
       clearInterval(timerInt);
       timerInt = setInterval(() => {
         const diff = Math.ceil((endTime - Date.now()) / 1000);
@@ -222,29 +217,12 @@
     }
 
     async function startNightSequence() {
-      // Automatic Chained Sequence
       announce("The sun sets. Everyone, close your eyes.");
       await setPhase("WEREWOLVES", 60);
-      
-      setTimeout(async () => {
-        announce("Werewolves, go to sleep. Seer, wake up.");
-        await setPhase("SEER", 30);
-      }, 62000);
-
-      setTimeout(async () => {
-        announce("Seer, go to sleep. Witch, wake up.");
-        await setPhase("WITCH", 30);
-      }, 93000);
-
-      setTimeout(async () => {
-        announce("Witch, go to sleep. Hunter, wake up.");
-        await setPhase("HUNTER", 3);
-      }, 124000);
-
-      setTimeout(async () => {
-        announce("Everyone, wake up. The sun is rising.");
-        await setPhase("IDLE", 0);
-      }, 128000);
+      setTimeout(async () => { announce("Werewolves, go to sleep. Seer, wake up."); await setPhase("SEER", 30); }, 61000);
+      setTimeout(async () => { announce("Seer, go to sleep. Witch, wake up."); await setPhase("WITCH", 30); }, 92000);
+      setTimeout(async () => { announce("Witch, go to sleep. Hunter, wake up."); await setPhase("HUNTER", 3); }, 123000);
+      setTimeout(async () => { announce("Everyone, wake up. The sun is rising."); await setPhase("IDLE", 0); }, 127000);
     }
 
     function setPhase(pName, duration) {
@@ -257,18 +235,21 @@
     function updatePlayerUI(players) {
       const listDiv = document.getElementById('playerList');
       const hostDiv = document.getElementById('hostPlayerList');
-      listDiv.innerHTML = "<h4>Players:</h4>";
+      listDiv.innerHTML = "<h4>Players Joined:</h4>";
       hostDiv.innerHTML = "";
 
       for (let id in players) {
         const p = players[id];
+        // Lobby Role Display: only show roles if toggle is ON
+        const roleLabel = rolesVisible ? ` (${p.role})` : "";
+        
         listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
-          <span>Seat ${p.seat}: ${p.name}</span>
+          <span>Seat ${p.seat}: ${p.name}${roleLabel}</span>
         </div>`;
 
         if (isHost) {
           hostDiv.innerHTML += `<div class="player-row">
-            <span>${p.name} ${rolesVisible ? '('+p.role+')' : ''}</span>
+            <span>${p.name}${roleLabel}</span>
             <button onclick="toggleLife('${id}', '${p.status}')" style="padding:2px 5px; font-size:0.6rem;">Kill/Revive</button>
           </div>`;
         }
@@ -279,7 +260,11 @@
       database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(status === "ALIVE" ? "DEAD" : "ALIVE");
     }
 
-    function toggleRoleVisibility() { rolesVisible = !rolesVisible; }
+    function toggleRoleVisibility() { 
+      rolesVisible = !rolesVisible; 
+      // Force a UI refresh from local data immediately
+      database.ref(`rooms/${currentRoom}/players`).once('value', snap => updatePlayerUI(snap.val()));
+    }
 
     function resetGame() {
       if (!confirm("Reset game?")) return;
