@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Moderator - Full Lobby</title>
+  <title>Werewolf Pro - Persistent Edition</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
@@ -12,11 +12,10 @@
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
     button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; transition: 0.2s; }
-    button:hover { background: #ff4d6d; }
     .player-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
     .leave-btn { background: #555; font-size: 0.7rem; position: absolute; top: 10px; right: 10px; padding: 5px 10px; }
     #roomBadge { font-size: 2.5rem; color: #4e9af1; font-weight: bold; letter-spacing: 5px; margin: 10px 0; }
-    .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; }
+    .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -58,13 +57,12 @@
   </div>
 
   <div id="gamePanel" class="panel hidden">
-    <h2 id="gameStatus">Identify Yourself</h2>
-    <div class="card" id="myRoleCard">TAP TO REVEAL</div>
-    <p id="roleDesc"></p>
+    <h2 id="gameStatus">Your Role</h2>
+    <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
+    <p id="roleDesc">Keep it secret!</p>
   </div>
 
   <script>
-    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -81,23 +79,33 @@
     let currentRoom = null;
     let myPlayerId = null;
     let isHost = false;
+    let currentRole = "Unknown";
 
-    // --- LOBBY & JOINING ---
+    // --- AUTO REJOIN LOGIC ---
+    window.onload = () => {
+      const savedRoom = localStorage.getItem('werewolf_room');
+      const savedId = localStorage.getItem('werewolf_id');
+      
+      if (savedRoom && savedId) {
+        database.ref(`rooms/${savedRoom}`).once('value', (snap) => {
+          if (snap.exists()) {
+            currentRoom = savedRoom;
+            myPlayerId = savedId;
+            // Check if I was the host (simple version: first player is usually host)
+            setupListeners(savedRoom);
+          } else {
+            localStorage.clear();
+          }
+        });
+      }
+    };
 
     function createGame() {
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
       const name = prompt("Enter your name:");
       if (!name) return;
-
       isHost = true;
-      currentRoom = code;
-      const initialData = {
-        hostId: "", 
-        status: "LOBBY",
-        settings: { wolves: 1, seer: true, witch: true, hunter: true }
-      };
-
-      database.ref('rooms/' + code).set(initialData).then(() => {
+      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => {
         addPlayerToRoom(code, name);
         document.getElementById('hostControls').classList.remove('hidden');
         showLobby(code);
@@ -108,10 +116,8 @@
       const code = document.getElementById('joinCode').value.toUpperCase();
       const name = prompt("Enter your name:");
       if (!name || !code) return;
-
       database.ref('rooms/' + code).once('value', (snap) => {
         if (snap.exists()) {
-          currentRoom = code;
           addPlayerToRoom(code, name);
           document.getElementById('playerStatus').classList.remove('hidden');
           showLobby(code);
@@ -122,25 +128,36 @@
     }
 
     function addPlayerToRoom(code, name) {
+      currentRoom = code;
       const playerRef = database.ref('rooms/' + code + '/players').push();
       myPlayerId = playerRef.key;
       
-      // Assign seat number based on order
+      // Save to localStorage
+      localStorage.setItem('werewolf_room', code);
+      localStorage.setItem('werewolf_id', myPlayerId);
+
+      // Seat numbering fix: starts from 1
       database.ref('rooms/' + code + '/players').once('value', (snap) => {
-        const seat = snap.numChildren();
+        const seat = snap.numChildren(); 
         playerRef.set({ name: name, seat: seat, role: "Waiting..." });
       });
 
-      // Listen for players
+      setupListeners(code);
+    }
+
+    function setupListeners(code) {
+      currentRoom = code;
+      showLobby(code);
+      
       database.ref('rooms/' + code + '/players').on('value', (snap) => {
         updatePlayerList(snap.val());
       });
 
-      // Listen for game status and my role
       database.ref('rooms/' + code + '/status').on('value', (snap) => {
         if (snap.val() === "PLAYING") {
           database.ref('rooms/' + code + '/players/' + myPlayerId + '/role').once('value', (rSnap) => {
-            showGame(rSnap.val());
+            currentRole = rSnap.val();
+            showGame();
           });
         }
       });
@@ -148,12 +165,11 @@
 
     function updatePlayerList(players) {
       const listDiv = document.getElementById('playerList');
-      listDiv.innerHTML = "<h4>Players:</h4>";
+      listDiv.innerHTML = "<h4>Players Joined:</h4>";
       for (let id in players) {
         listDiv.innerHTML += `<div class="player-row">
-          <span>#${players[id].seat}</span>
+          <span>Seat ${players[id].seat}</span>
           <span>${players[id].name}</span>
-          <span>${isHost ? 'OK' : ''}</span>
         </div>`;
       }
     }
@@ -165,49 +181,41 @@
       document.getElementById('roomBadge').innerText = code;
     }
 
-    // --- ROLE ASSIGNMENT LOGIC ---
-
     function assignRolesAndStart() {
       database.ref('rooms/' + currentRoom + '/players').once('value', (snap) => {
         const playersData = snap.val();
         const playerIds = Object.keys(playersData);
-        const playerCount = playerIds.length;
-
-        // Build Role Pool based on settings
         let roles = [];
         const wolves = parseInt(document.getElementById('wolfCount').value);
         for(let i=0; i<wolves; i++) roles.push("WEREWOLF");
         if(document.getElementById('includeSeer').checked) roles.push("SEER");
         if(document.getElementById('includeWitch').checked) roles.push("WITCH");
         if(document.getElementById('includeHunter').checked) roles.push("HUNTER");
+        while(roles.length < playerIds.length) roles.push("VILLAGER");
         
-        while(roles.length < playerCount) roles.push("VILLAGER");
-        
-        // Shuffle roles
         roles.sort(() => Math.random() - 0.5);
-
-        // Assign to database
         playerIds.forEach((id, index) => {
           database.ref('rooms/' + currentRoom + '/players/' + id + '/role').set(roles[index]);
         });
-
-        // Set Game Status to trigger UI for everyone
         database.ref('rooms/' + currentRoom + '/status').set("PLAYING");
       });
     }
 
-    function showGame(role) {
+    function showGame() {
       document.getElementById('lobbyPanel').classList.add('hidden');
       document.getElementById('gamePanel').classList.remove('hidden');
-      document.getElementById('myRoleCard').onclick = () => {
-        document.getElementById('myRoleCard').innerText = role;
-        document.getElementById('myRoleCard').style.background = (role === "WEREWOLF") ? "#e94560" : "#4e9af1";
-      };
+    }
+
+    function revealRoleOnCard() {
+      const card = document.getElementById('myRoleCard');
+      card.innerText = currentRole;
+      card.style.background = (currentRole === "WEREWOLF") ? "#e94560" : "#4e9af1";
     }
 
     function leaveGame() {
-      if (currentRoom && myPlayerId) {
+      if (confirm("Leave this game?")) {
         database.ref('rooms/' + currentRoom + '/players/' + myPlayerId).remove();
+        localStorage.clear();
         location.reload();
       }
     }
