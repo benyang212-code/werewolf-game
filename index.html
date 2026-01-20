@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Werewolf Pro - Baseline</title>
+  <title>Werewolf Pro - Secure Host</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
   <style>
-    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; transition: background 1s; }
     .hidden { display: none !important; }
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
@@ -21,6 +21,11 @@
     .dead { text-decoration: line-through; color: #ff4d6d !important; opacity: 0.6; }
     
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
+    .night-mode { background: #050510 !important; }
+    
+    .host-btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 10px; }
+    .btn-secondary { background: #4e9af1; font-size: 0.8rem; }
+    .btn-danger { background: #555; font-size: 0.8rem; }
   </style>
 </head>
 <body>
@@ -50,6 +55,7 @@
       </div><br>
       <button onclick="assignRolesAndStart()">DEAL & START</button>
     </div>
+
     <div id="playerStatus" class="hidden"><h3>Waiting for host...</h3></div>
     <hr style="border: 0; border-top: 1px solid #4e9af1;">
     <div id="playerList"></div>
@@ -68,14 +74,16 @@
     <div id="hostDashboard" class="hidden">
       <hr>
       <h3>Host Tools</h3>
-      <button onclick="toggleRoleVisibility()" style="font-size:0.75rem; background:#4e9af1">Show/Hide Roles</button>
-      <button onclick="resetGame()" style="font-size:0.75rem; background:#555">Reset Room</button>
+      <div class="host-btn-group">
+        <button class="btn-secondary" onclick="toggleRoleVisibility()">Show/Hide Secret Roles</button>
+        <button class="btn-danger" onclick="resetGame()">Reset Room</button>
+      </div>
       <div id="hostPlayerList" style="margin-top: 15px;"></div>
     </div>
   </div>
 
   <script>
-    // --- YOUR FIREBASE CONFIG ---
+    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -91,14 +99,12 @@
 
     let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false;
 
-    // Load session from local storage
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
       const savedHost = localStorage.getItem('werewolf_isHost');
       if (savedRoom && savedId) {
-        currentRoom = savedRoom; 
-        myPlayerId = savedId;
+        currentRoom = savedRoom; myPlayerId = savedId;
         isHost = (savedHost === "true");
         setupListeners(savedRoom);
       }
@@ -108,8 +114,7 @@
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
       const name = prompt("Enter host name:");
       if (!name) return;
-      isHost = true; 
-      localStorage.setItem('werewolf_isHost', "true");
+      isHost = true; localStorage.setItem('werewolf_isHost', "true");
       database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
     }
 
@@ -151,11 +156,13 @@
         if (data.status === "LOBBY") {
           document.getElementById('lobbyPanel').classList.remove('hidden');
           document.getElementById('gamePanel').classList.add('hidden');
+          document.body.classList.remove('night-mode');
           if (isHost) document.getElementById('hostControls').classList.remove('hidden');
           else document.getElementById('playerStatus').classList.remove('hidden');
         } else {
           document.getElementById('lobbyPanel').classList.add('hidden');
           document.getElementById('gamePanel').classList.remove('hidden');
+          document.body.classList.add('night-mode');
           if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
           
           const me = data.players[myPlayerId];
@@ -175,41 +182,49 @@
     function updatePlayerUI(players) {
       const listDiv = document.getElementById('playerList');
       const hostDiv = document.getElementById('hostPlayerList');
-      listDiv.innerHTML = "<h4>Players:</h4>";
+      listDiv.innerHTML = "<h4>Players Joined:</h4>";
       hostDiv.innerHTML = "";
 
       for (let id in players) {
         const p = players[id];
-        const roleInfo = rolesVisible ? ` (${p.role})` : "";
-        
         listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
-          <span>Seat ${p.seat}: ${p.name}${roleInfo}</span>
+          <span>Seat ${p.seat}: ${p.name}</span>
         </div>`;
 
         if (isHost) {
+          const roleDisplay = rolesVisible ? p.role : "???";
           hostDiv.innerHTML += `<div class="player-row">
-            <span>${p.name}${roleInfo}</span>
-            <button onclick="toggleLife('${id}', '${p.status}')" style="padding:2px 5px; font-size:0.6rem;">Kill/Revive</button>
+            <span>${p.name} (${roleDisplay})</span>
+            <button class="btn-secondary" style="padding:5px;" onclick="toggleLife('${id}', '${p.status}')">
+              ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
+            </button>
           </div>`;
         }
       }
     }
 
-    function toggleLife(pid, status) {
-      database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(status === "ALIVE" ? "DEAD" : "ALIVE");
+    function toggleRoleVisibility() {
+      rolesVisible = !rolesVisible;
+      database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => updatePlayerUI(snap.val()));
     }
 
-    function toggleRoleVisibility() { 
-      rolesVisible = !rolesVisible; 
-      database.ref(`rooms/${currentRoom}/players`).once('value', snap => updatePlayerUI(snap.val()));
+    function toggleLife(pid, currentStatus) {
+      database.ref(`rooms/${currentRoom}/players/${pid}/status`).set(currentStatus === "ALIVE" ? "DEAD" : "ALIVE");
     }
 
     function resetGame() {
-      if (!confirm("Reset game?")) return;
-      database.ref(`rooms/${currentRoom}/status`).set("LOBBY");
-      database.ref(`rooms/${currentRoom}/players`).once('value', snap => {
-        snap.forEach(child => child.ref.update({ role: "Waiting...", status: "ALIVE" }));
-      });
+      if (confirm("Reset game? All roles and deaths will be cleared.")) {
+        database.ref(`rooms/${currentRoom}/status`).set("LOBBY");
+        database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => {
+          const players = snap.val();
+          for (let id in players) {
+            database.ref(`rooms/${currentRoom}/players/${id}`).update({
+              role: "Waiting...",
+              status: "ALIVE"
+            });
+          }
+        });
+      }
     }
 
     function assignRolesAndStart() {
@@ -247,8 +262,7 @@
     function leaveGame() {
       if (confirm("Leave game?")) {
         database.ref(`rooms/${currentRoom}/players/${myPlayerId}`).remove();
-        localStorage.clear(); 
-        location.reload();
+        localStorage.clear(); location.reload();
       }
     }
   </script>
