@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Werewolf Pro - Host Dashboard</title>
+  <title>Werewolf Pro - Flexible Host</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
@@ -12,6 +12,7 @@
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
     button { padding: 12px 24px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; font-weight: bold; margin: 5px; transition: 0.2s; }
+    button:hover { background: #ff4d6d; }
     .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
     .dead { text-decoration: line-through; color: #555 !important; }
     .host-kill-btn { background: #555; font-size: 0.7rem; padding: 5px; }
@@ -20,6 +21,7 @@
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
     .night-mode { background: #000000 !important; }
     .dead-overlay { color: #e94560; font-weight: bold; font-size: 2rem; }
+    .host-badge { background: #4e9af1; font-size: 0.6rem; padding: 2px 5px; border-radius: 3px; margin-left: 5px; }
   </style>
 </head>
 <body>
@@ -39,15 +41,11 @@
     <div id="roomBadge">----</div>
     
     <div id="hostControls" class="hidden">
-      <h3>Game Settings</h3>
-      <label>Werewolves: </label>
-      <select id="wolfCount">
-        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-      </select>
-      <div style="text-align: left; margin: 10px 20%; font-size: 0.8rem;">
-        <label><input type="checkbox" id="includeSeer" checked> Seer</label><br>
-        <label><input type="checkbox" id="includeWitch" checked> Witch</label><br>
-        <label><input type="checkbox" id="includeHunter" checked> Hunter</label>
+      <h3>Host Settings</h3>
+      <div style="margin-bottom: 15px;">
+        <label>
+          <input type="checkbox" id="hostIsPlaying" checked> Host is Playing a Character
+        </label>
       </div>
       <button onclick="assignRolesAndStart()">DEAL ROLES & START</button>
     </div>
@@ -69,17 +67,18 @@
     
     <div id="hostDashboard" class="hidden">
       <hr>
-      <h3>Host Control Panel</h3>
+      <h3>Host Control Panel (God View)</h3>
       <div id="hostPlayerList"></div>
     </div>
 
     <div id="deadMessage" class="hidden">
       <h1 class="dead-overlay">YOU ARE DEAD</h1>
-      <p>Please stay quiet and enjoy the show.</p>
+      <p>Stay quiet!</p>
     </div>
   </div>
 
   <script>
+    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -93,7 +92,7 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", heartbeatInterval;
+    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown";
 
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
@@ -107,25 +106,13 @@
       }
     };
 
-    function playHeartbeat() {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      heartbeatInterval = setInterval(() => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.frequency.setValueAtTime(60, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-      }, 1000);
-    }
-
     function createGame() {
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const name = prompt("Enter your name:");
+      const name = prompt("Enter host name:");
       if (!name) return;
       isHost = true;
       localStorage.setItem('werewolf_isHost', "true");
-      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
+      database.ref('rooms/' + code).set({ status: "LOBBY", hostId: "" }).then(() => addPlayerToRoom(code, name));
     }
 
     function joinGame() {
@@ -162,10 +149,14 @@
         updatePlayerList(players);
         if (isHost) updateHostDashboard(players);
         
-        // Check if I am dead
-        if (players && players[myPlayerId] && players[myPlayerId].status === "DEAD") {
-          document.getElementById('roleView').classList.add('hidden');
-          document.getElementById('deadMessage').classList.remove('hidden');
+        if (players && players[myPlayerId]) {
+          if (players[myPlayerId].status === "DEAD") {
+            document.getElementById('roleView').classList.add('hidden');
+            document.getElementById('deadMessage').classList.remove('hidden');
+          }
+          if (players[myPlayerId].role === "MODERATOR") {
+             document.getElementById('roleView').classList.add('hidden');
+          }
         }
       });
 
@@ -196,7 +187,7 @@
       for (let id in players) {
         const p = players[id];
         dash.innerHTML += `<div class="player-row">
-          <span>${p.name} (${p.role})</span>
+          <span>${p.name} <small>(${p.role})</small></span>
           <button class="host-kill-btn" onclick="toggleLife('${id}', '${p.status}')">
             ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
           </button>
@@ -217,20 +208,33 @@
     }
 
     function assignRolesAndStart() {
+      const hostIsPlaying = document.getElementById('hostIsPlaying').checked;
+      
       database.ref('rooms/' + currentRoom + '/players').once('value', (snap) => {
         const playersData = snap.val();
         const playerIds = Object.keys(playersData);
+        
         let roles = [];
-        const wolves = parseInt(document.getElementById('wolfCount').value);
-        for(let i=0; i<wolves; i++) roles.push("WEREWOLF");
-        if(document.getElementById('includeSeer').checked) roles.push("SEER");
-        if(document.getElementById('includeWitch').checked) roles.push("WITCH");
-        if(document.getElementById('includeHunter').checked) roles.push("HUNTER");
-        while(roles.length < playerIds.length) roles.push("VILLAGER");
+        let assignablePlayerIds = [...playerIds];
+
+        // Logic: If Host is NOT playing, assign them the "MODERATOR" role immediately
+        if (!hostIsPlaying) {
+          database.ref(`rooms/${currentRoom}/players/${myPlayerId}/role`).set("MODERATOR");
+          assignablePlayerIds = assignablePlayerIds.filter(id => id !== myPlayerId);
+        }
+
+        // Standard role pool for remaining players
+        // (You can add logic back here to adjust werewolf counts if needed)
+        roles.push("WEREWOLF");
+        roles.push("SEER");
+        roles.push("WITCH");
+        while(roles.length < assignablePlayerIds.length) roles.push("VILLAGER");
+        
         roles.sort(() => Math.random() - 0.5);
-        playerIds.forEach((id, index) => {
+        assignablePlayerIds.forEach((id, index) => {
           database.ref(`rooms/${currentRoom}/players/${id}/role`).set(roles[index]);
         });
+
         database.ref('rooms/' + currentRoom + '/status').set("PLAYING");
       });
     }
@@ -240,7 +244,6 @@
       document.getElementById('gamePanel').classList.remove('hidden');
       document.body.classList.add('night-mode');
       if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
-      playHeartbeat();
     }
 
     function revealRoleOnCard() {
@@ -251,7 +254,6 @@
 
     function leaveGame() {
       if (confirm("Leave game?")) {
-        clearInterval(heartbeatInterval);
         database.ref(`rooms/${currentRoom}/players/${myPlayerId}`).remove();
         localStorage.clear();
         location.reload();
