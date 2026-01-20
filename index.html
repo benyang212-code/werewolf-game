@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Werewolf Pro - Master Moderator</title>
+  <title>Werewolf Pro - Baseline</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
   <style>
-    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; transition: background 1s; }
+    body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
     .hidden { display: none !important; }
     .panel { background: #16213e; padding: 20px; border-radius: 15px; max-width: 450px; margin: 20px auto; border: 1px solid #4e9af1; position: relative; }
     input, select { padding: 10px; border-radius: 5px; border: none; margin: 10px 0; width: 80%; background: #0f3460; color: white; }
@@ -17,13 +17,10 @@
     #roomSticky { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; border: 1px solid #4e9af1; font-size: 0.8rem; z-index: 100; }
     .leave-btn { background: #555; font-size: 0.7rem; position: fixed; top: 10px; right: 10px; padding: 8px 15px; border-radius: 20px; z-index: 100; }
     
-    #timerDisplay { font-size: 3rem; color: #ff4d6d; font-weight: bold; margin: 5px 0; }
     .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #0f3460; font-size: 0.9rem; }
     .dead { text-decoration: line-through; color: #ff4d6d !important; opacity: 0.6; }
     
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
-    .night-mode { background: #050510 !important; }
-    .your-turn { border: 5px solid #4e9af1 !important; box-shadow: 0 0 20px #4e9af1; }
   </style>
 </head>
 <body>
@@ -59,10 +56,8 @@
   </div>
 
   <div id="gamePanel" class="panel hidden">
-    <div id="timerDisplay" class="hidden">00</div>
-    <div id="phaseText" style="font-weight: bold; color: #4e9af1; margin-bottom: 10px;">Day Phase</div>
-
     <div id="roleView">
+      <h2 id="gameStatus">Your Role</h2>
       <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
     </div>
 
@@ -72,16 +67,15 @@
     
     <div id="hostDashboard" class="hidden">
       <hr>
-      <button onclick="startNightSequence()" style="background:#4e9af1">🌙 START NIGHT FALL</button>
-      <div style="margin-top:10px;">
-        <button onclick="toggleRoleVisibility()" style="font-size:0.7rem; background:#555">Show/Hide Roles</button>
-        <button onclick="resetGame()" style="font-size:0.7rem; background:#555">Reset Room</button>
-      </div>
+      <h3>Host Tools</h3>
+      <button onclick="toggleRoleVisibility()" style="font-size:0.75rem; background:#4e9af1">Show/Hide Roles</button>
+      <button onclick="resetGame()" style="font-size:0.75rem; background:#555">Reset Room</button>
       <div id="hostPlayerList" style="margin-top: 15px;"></div>
     </div>
   </div>
 
   <script>
+    // --- YOUR FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
   authDomain: "werewolfgame-7386c.firebaseapp.com",
@@ -95,21 +89,16 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false, timerInt;
+    let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false;
 
-    function announce(text) {
-      window.speechSynthesis.cancel();
-      const msg = new SpeechSynthesisUtterance(text);
-      msg.rate = 0.9;
-      window.speechSynthesis.speak(msg);
-    }
-
+    // Load session from local storage
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
       const savedHost = localStorage.getItem('werewolf_isHost');
       if (savedRoom && savedId) {
-        currentRoom = savedRoom; myPlayerId = savedId;
+        currentRoom = savedRoom; 
+        myPlayerId = savedId;
         isHost = (savedHost === "true");
         setupListeners(savedRoom);
       }
@@ -119,8 +108,9 @@
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
       const name = prompt("Enter host name:");
       if (!name) return;
-      isHost = true; localStorage.setItem('werewolf_isHost', "true");
-      database.ref('rooms/' + code).set({ status: "LOBBY", nightPhase: "IDLE" }).then(() => addPlayerToRoom(code, name));
+      isHost = true; 
+      localStorage.setItem('werewolf_isHost', "true");
+      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
     }
 
     function joinGame() {
@@ -161,20 +151,15 @@
         if (data.status === "LOBBY") {
           document.getElementById('lobbyPanel').classList.remove('hidden');
           document.getElementById('gamePanel').classList.add('hidden');
-          document.body.classList.remove('night-mode');
           if (isHost) document.getElementById('hostControls').classList.remove('hidden');
           else document.getElementById('playerStatus').classList.remove('hidden');
         } else {
           document.getElementById('lobbyPanel').classList.add('hidden');
           document.getElementById('gamePanel').classList.remove('hidden');
-          document.body.classList.add('night-mode');
           if (isHost) document.getElementById('hostDashboard').classList.remove('hidden');
           
           const me = data.players[myPlayerId];
           currentRole = me.role;
-          
-          updateNightUI(data.nightPhase, data.phaseEndTime);
-
           if (me.status === "DEAD") {
             document.getElementById('roleView').classList.add('hidden');
             document.getElementById('deadMessage').classList.remove('hidden');
@@ -187,69 +172,23 @@
       });
     }
 
-    function updateNightUI(phase, endTime) {
-      const timerDiv = document.getElementById('timerDisplay');
-      const phaseText = document.getElementById('phaseText');
-      const card = document.getElementById('myRoleCard');
-
-      if (!phase || phase === "IDLE") {
-        timerDiv.classList.add('hidden');
-        phaseText.innerText = "Day Phase";
-        card.classList.remove('your-turn');
-        return;
-      }
-
-      timerDiv.classList.remove('hidden');
-      phaseText.innerText = phase + " TURN";
-      
-      if ((currentRole === "WEREWOLF" && phase === "WEREWOLVES") || currentRole === phase) {
-        card.classList.add('your-turn');
-      } else {
-        card.classList.remove('your-turn');
-      }
-
-      clearInterval(timerInt);
-      timerInt = setInterval(() => {
-        const diff = Math.ceil((endTime - Date.now()) / 1000);
-        timerDiv.innerText = diff > 0 ? diff : "0";
-        if (diff <= 0) clearInterval(timerInt);
-      }, 1000);
-    }
-
-    async function startNightSequence() {
-      announce("The sun sets. Everyone, close your eyes.");
-      await setPhase("WEREWOLVES", 60);
-      setTimeout(async () => { announce("Werewolves, go to sleep. Seer, wake up."); await setPhase("SEER", 30); }, 61000);
-      setTimeout(async () => { announce("Seer, go to sleep. Witch, wake up."); await setPhase("WITCH", 30); }, 92000);
-      setTimeout(async () => { announce("Witch, go to sleep. Hunter, wake up."); await setPhase("HUNTER", 3); }, 123000);
-      setTimeout(async () => { announce("Everyone, wake up. The sun is rising."); await setPhase("IDLE", 0); }, 127000);
-    }
-
-    function setPhase(pName, duration) {
-      return database.ref(`rooms/${currentRoom}`).update({
-        nightPhase: pName,
-        phaseEndTime: Date.now() + (duration * 1000)
-      });
-    }
-
     function updatePlayerUI(players) {
       const listDiv = document.getElementById('playerList');
       const hostDiv = document.getElementById('hostPlayerList');
-      listDiv.innerHTML = "<h4>Players Joined:</h4>";
+      listDiv.innerHTML = "<h4>Players:</h4>";
       hostDiv.innerHTML = "";
 
       for (let id in players) {
         const p = players[id];
-        // Lobby Role Display: only show roles if toggle is ON
-        const roleLabel = rolesVisible ? ` (${p.role})` : "";
+        const roleInfo = rolesVisible ? ` (${p.role})` : "";
         
         listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
-          <span>Seat ${p.seat}: ${p.name}${roleLabel}</span>
+          <span>Seat ${p.seat}: ${p.name}${roleInfo}</span>
         </div>`;
 
         if (isHost) {
           hostDiv.innerHTML += `<div class="player-row">
-            <span>${p.name}${roleLabel}</span>
+            <span>${p.name}${roleInfo}</span>
             <button onclick="toggleLife('${id}', '${p.status}')" style="padding:2px 5px; font-size:0.6rem;">Kill/Revive</button>
           </div>`;
         }
@@ -262,13 +201,12 @@
 
     function toggleRoleVisibility() { 
       rolesVisible = !rolesVisible; 
-      // Force a UI refresh from local data immediately
       database.ref(`rooms/${currentRoom}/players`).once('value', snap => updatePlayerUI(snap.val()));
     }
 
     function resetGame() {
       if (!confirm("Reset game?")) return;
-      database.ref(`rooms/${currentRoom}`).update({ status: "LOBBY", nightPhase: "IDLE" });
+      database.ref(`rooms/${currentRoom}/status`).set("LOBBY");
       database.ref(`rooms/${currentRoom}/players`).once('value', snap => {
         snap.forEach(child => child.ref.update({ role: "Waiting...", status: "ALIVE" }));
       });
@@ -309,7 +247,8 @@
     function leaveGame() {
       if (confirm("Leave game?")) {
         database.ref(`rooms/${currentRoom}/players/${myPlayerId}`).remove();
-        localStorage.clear(); location.reload();
+        localStorage.clear(); 
+        location.reload();
       }
     }
   </script>
