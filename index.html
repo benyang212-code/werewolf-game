@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Werewolf Pro - Night Edition</title>
+  <title>Werewolf Pro - Secure Host</title>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
   
@@ -23,15 +23,9 @@
     .card { width: 180px; height: 260px; background: #0f3460; border: 3px solid #e94560; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 20px auto; cursor: pointer; }
     .night-mode { background: #050510 !important; }
     
-    /* NEW STYLES FOR NIGHT PHASE */
-    #timerDisplay { font-size: 4rem; font-weight: bold; color: #e94560; margin: 10px 0; text-shadow: 0 0 10px #e94560; }
-    #phaseName { font-size: 1.2rem; color: #4e9af1; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; }
-    .active-turn { border: 4px solid #4e9af1 !important; box-shadow: 0 0 20px #4e9af1; transform: scale(1.02); transition: 0.3s; }
-    
     .host-btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 10px; }
     .btn-secondary { background: #4e9af1; font-size: 0.8rem; }
     .btn-danger { background: #555; font-size: 0.8rem; }
-    .btn-night { background: #8e44ad; width: 100%; margin-bottom: 10px; font-size: 1rem; }
   </style>
 </head>
 <body>
@@ -68,11 +62,6 @@
   </div>
 
   <div id="gamePanel" class="panel hidden">
-    <div id="nightHeader" class="hidden">
-      <div id="phaseName">Night Phase</div>
-      <div id="timerDisplay">00</div>
-    </div>
-
     <div id="roleView">
       <h2 id="gameStatus">Your Role</h2>
       <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
@@ -85,8 +74,6 @@
     <div id="hostDashboard" class="hidden">
       <hr>
       <h3>Host Tools</h3>
-      <button class="btn-night" onclick="startNightSequence()">🌙 START NIGHT FALL</button>
-      
       <div class="host-btn-group">
         <button class="btn-secondary" onclick="toggleRoleVisibility()">Show/Hide Secret Roles</button>
         <button class="btn-danger" onclick="resetGame()">Reset Room</button>
@@ -99,30 +86,18 @@
     // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
-      authDomain: "werewolfgame-7386c.firebaseapp.com",
-      databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "werewolfgame-7386c",
-      storageBucket: "werewolfgame-7386c.firebasestorage.app",
-      messagingSenderId: "37154052928",
-      appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
-      measurementId: "G-1VYE9RRKVJ"
+  authDomain: "werewolfgame-7386c.firebaseapp.com",
+  databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "werewolfgame-7386c",
+  storageBucket: "werewolfgame-7386c.firebasestorage.app",
+  messagingSenderId: "37154052928",
+  appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
+  measurementId: "G-1VYE9RRKVJ"
     };
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
     let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false;
-    let timerInterval = null;
-
-    // --- NEW: Voice Helper ---
-    function announce(text) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); // Stop previous
-        const msg = new SpeechSynthesisUtterance(text);
-        msg.rate = 0.9; 
-        msg.pitch = 0.8; // Lower pitch for dramatic effect
-        window.speechSynthesis.speak(msg);
-      }
-    }
 
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
@@ -140,8 +115,7 @@
       const name = prompt("Enter host name:");
       if (!name) return;
       isHost = true; localStorage.setItem('werewolf_isHost', "true");
-      // Added nightPhase: "IDLE" to initial state
-      database.ref('rooms/' + code).set({ status: "LOBBY", nightPhase: "IDLE" }).then(() => addPlayerToRoom(code, name));
+      database.ref('rooms/' + code).set({ status: "LOBBY" }).then(() => addPlayerToRoom(code, name));
     }
 
     function joinGame() {
@@ -186,7 +160,6 @@
           if (isHost) document.getElementById('hostControls').classList.remove('hidden');
           else document.getElementById('playerStatus').classList.remove('hidden');
         } else {
-          // GAME PHASE
           document.getElementById('lobbyPanel').classList.add('hidden');
           document.getElementById('gamePanel').classList.remove('hidden');
           document.body.classList.add('night-mode');
@@ -194,10 +167,6 @@
           
           const me = data.players[myPlayerId];
           currentRole = me.role;
-
-          // --- NEW: Handle Night UI & Timer ---
-          handleNightPhase(data.nightPhase, data.phaseEndTime);
-
           if (me.status === "DEAD") {
             document.getElementById('roleView').classList.add('hidden');
             document.getElementById('deadMessage').classList.remove('hidden');
@@ -207,93 +176,6 @@
           }
         }
         updatePlayerUI(data.players);
-      });
-    }
-
-    // --- NEW: Night Logic Function ---
-    function handleNightPhase(phase, endTime) {
-      const timerDisplay = document.getElementById('timerDisplay');
-      const header = document.getElementById('nightHeader');
-      const phaseName = document.getElementById('phaseName');
-      const myCard = document.getElementById('myRoleCard');
-
-      // Clear previous timer
-      if (timerInterval) clearInterval(timerInterval);
-
-      if (!phase || phase === "IDLE") {
-        header.classList.add('hidden');
-        myCard.classList.remove('active-turn');
-        return;
-      }
-
-      // Show Timer UI
-      header.classList.remove('hidden');
-      phaseName.innerText = phase.replace('_', ' ') + " TURN";
-      
-      // Highlight my card if it is my turn
-      if (currentRole === "WEREWOLF" && phase === "WEREWOLVES") {
-        myCard.classList.add('active-turn');
-      } else if (currentRole === phase) {
-        myCard.classList.add('active-turn');
-      } else {
-        myCard.classList.remove('active-turn');
-      }
-
-      // Start Countdown
-      timerInterval = setInterval(() => {
-        const now = Date.now();
-        const diff = Math.ceil((endTime - now) / 1000);
-        
-        if (diff >= 0) {
-          timerDisplay.innerText = diff < 10 ? "0" + diff : diff;
-        } else {
-          timerDisplay.innerText = "00";
-          clearInterval(timerInterval);
-        }
-      }, 1000);
-    }
-
-    // --- NEW: Sequence Automation (Host Only) ---
-    async function startNightSequence() {
-      if(!confirm("Start automated night sequence?")) return;
-
-      // 1. Start Night
-      announce("Night falls. Everyone please close your eyes.");
-      
-      // 2. Wolves (60s)
-      await setPhase("WEREWOLVES", 60); 
-      announce("Werewolves, wake up.");
-
-      // 3. Seer (30s) - Triggered after 60s
-      setTimeout(async () => {
-        announce("Werewolves sleep. Seer, wake up.");
-        await setPhase("SEER", 30);
-      }, 62000); // Small buffer for transition
-
-      // 4. Witch (30s)
-      setTimeout(async () => {
-        announce("Seer sleep. Witch, wake up.");
-        await setPhase("WITCH", 30);
-      }, 93000);
-
-      // 5. Hunter (3s)
-      setTimeout(async () => {
-        announce("Witch sleep. Hunter, wake up.");
-        await setPhase("HUNTER", 3);
-      }, 124000);
-
-      // 6. End Night
-      setTimeout(async () => {
-        announce("Hunter sleep. The sun rises. Everyone wake up.");
-        database.ref('rooms/' + currentRoom).update({ nightPhase: "IDLE" });
-      }, 128000);
-    }
-
-    function setPhase(role, seconds) {
-      const endTime = Date.now() + (seconds * 1000);
-      return database.ref('rooms/' + currentRoom).update({
-        nightPhase: role,
-        phaseEndTime: endTime
       });
     }
 
@@ -332,7 +214,7 @@
 
     function resetGame() {
       if (confirm("Reset game? All roles and deaths will be cleared.")) {
-        database.ref(`rooms/${currentRoom}`).update({ status: "LOBBY", nightPhase: "IDLE" });
+        database.ref(`rooms/${currentRoom}/status`).set("LOBBY");
         database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => {
           const players = snap.val();
           for (let id in players) {
@@ -368,7 +250,6 @@
           database.ref(`rooms/${currentRoom}/players/${id}/role`).set(roles[index]);
         });
         database.ref(`rooms/${currentRoom}/status`).set("PLAYING");
-        database.ref(`rooms/${currentRoom}/nightPhase`).set("IDLE");
       });
     }
 
