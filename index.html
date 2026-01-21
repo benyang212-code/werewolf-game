@@ -64,7 +64,7 @@
   <div id="gamePanel" class="panel hidden">
     <div id="roleView">
       <h2 id="gameStatus">Your Role</h2>
-      <div class="card" id="myRoleCard" onclick="revealRoleOnCard()">TAP TO REVEAL</div>
+      <div class="card" id="myRoleCard">TAP & HOLD</div>
     </div>
 
     <div id="deadMessage" class="hidden">
@@ -253,11 +253,38 @@
       });
     }
 
-    function revealRoleOnCard() {
-      const card = document.getElementById('myRoleCard');
-      card.innerText = currentRole;
-      card.style.background = (currentRole === "WEREWOLF") ? "#e94560" : "#4e9af1";
-    }
+    
+
+function showRole() {
+    const card = document.getElementById("myRoleCard");
+    card.innerText = currentRole;
+    card.style.background =
+        currentRole === "WEREWOLF" ? "#e94560" : "#4e9af1";
+}
+
+function hideRole() {
+    const card = document.getElementById("myRoleCard");
+    card.innerText = "TAP & HOLD";
+    card.style.background = "#0f3460";
+}
+
+function setupRoleCardEvents() {
+    const card = document.getElementById("myRoleCard");
+
+    // Mouse events
+    card.addEventListener("mousedown", showRole);
+    card.addEventListener("mouseup", hideRole);
+    card.addEventListener("mouseleave", hideRole);
+
+    // Touch events
+    card.addEventListener("touchstart", showRole);
+    card.addEventListener("touchend", hideRole);
+    card.addEventListener("touchcancel", hideRole);
+}
+
+window.addEventListener("load", setupRoleCardEvents);
+
+
 
     function leaveGame() {
       if (confirm("Leave game?")) {
