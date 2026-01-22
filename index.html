@@ -34,6 +34,15 @@
 .small-note { font-size: 0.85rem; opacity: 0.8; }
 .hidden-inline { display:none; }
 
+/* --- Phase & action UI --- */
+#phaseBar { display:flex; justify-content:center; align-items:center; gap:10px; margin: 10px 0; }
+#phaseLabel { font-weight: 700; letter-spacing: 0.5px; }
+#phaseCountdown { font-variant-numeric: tabular-nums; background:#0f3460; padding:4px 10px; border-radius:12px; border:1px solid #4e9af1; }
+.role-action { margin-top: 10px; }
+.small-note { font-size: 0.85rem; opacity: 0.8; }
+.hidden-inline { display:none; }
+
+
   </style>
 </head>
 <body>
@@ -74,12 +83,9 @@
       <h2 id="gameStatus">Your Role</h2>
       <div class="card" id="myRoleCard">TAP & HOLD</div>
     </div>
-
-<div id="actionPanel" class="panel hidden" style="margin-top:10px;">
-  <!-- Will be rendered dynamically per phase & role -->
-</div>
-``
-
+    <div id="actionPanel" class="panel hidden" style="margin-top:10px;">
+      <!-- Will be rendered dynamically per phase & role -->
+    </div>
     <div id="deadMessage" class="hidden">
       <h1 style="color: #e94560;">YOU ARE DEAD</h1>
     </div>
@@ -87,18 +93,16 @@
     <div id="hostDashboard" class="hidden">
       <hr>
       <h3>Host Tools</h3>
-<div id="phaseBar">
-  <span id="phaseLabel">—</span>
-  <span id="phaseCountdown">—</span>
-</div>
-
+        <div id="phaseBar">
+          <span id="phaseLabel">—</span>
+          <span id="phaseCountdown">—</span>
+        </div>
+      
       <div class="host-btn-group">
         <button class="btn-secondary" onclick="toggleRoleVisibility()">Show/Hide Secret Roles</button>
-        <button class="btn-danger" onclick="resetGame()">Reset Room</button>
-        
-<button class="btn-secondary" onclick="startNight()">Nightfall</button>
-<button class="btn-secondary" onclick="advancePhase()">Next Phase</button>
-<button class="btn-danger" onclick="toggleVoice()"><span id="voiceState">Voice: On</span></button>
+        <button class="btn-danger" onclick="resetGame()">Reset Room</button>    
+        <button class="btn-secondary" onclick="startNight()">Nightfall</button>
+        <button class="btn-danger" onclick="toggleVoice()"><span id="voiceState">Voice: On</span></button>
 
       </div>
       <div id="hostPlayerList" style="margin-top: 15px;"></div>
@@ -109,25 +113,45 @@
     // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
-  authDomain: "werewolfgame-7386c.firebaseapp.com",
-  databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "werewolfgame-7386c",
-  storageBucket: "werewolfgame-7386c.firebasestorage.app",
-  messagingSenderId: "37154052928",
-  appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
-  measurementId: "G-1VYE9RRKVJ"
+      authDomain: "werewolfgame-7386c.firebaseapp.com",
+      databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "werewolfgame-7386c",
+      storageBucket: "werewolfgame-7386c.firebasestorage.app",
+      messagingSenderId: "37154052928",
+      appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
+      measurementId: "G-1VYE9RRKVJ"
     };
     firebase.initializeApp(firebaseConfig);
     
-// Sync to Firebase server time for accurate countdowns
-firebase.database().ref('/.info/serverTimeOffset').on('value', s => {
-  serverOffset = s.val() || 0;
-});
+    // Sync to Firebase server time for accurate countdowns
+    firebase.database().ref('/.info/serverTimeOffset').on('value', s => {
+      serverOffset = s.val() || 0;
+    });
 
     const database = firebase.database();
 
     let currentRoom = null, myPlayerId = null, isHost = false, currentRole = "Unknown", rolesVisible = false;
 
+    // --- PHASE / TIMER / VOICE / ACTION---
+    let phase = { name: '', endsAt: 0, night: 0 };
+    let serverOffset = 0;
+    let timerInterval = null;
+    let voiceOn = true;
+    let lastPlayers = {}; // cache of players for action UIs
+    let actionRef = null;       // live listener for current phase actions
+    let resolvingLock = false;  // prevent double advance
+
+    const PHASES = ['NIGHTFALL', 'WOLVES', 'SEER', 'WITCH', 'HUNTER', 'DAY'];
+    const PHASE_DUR_MS = {
+      NIGHTFALL: 3000,
+      WOLVES: 60000,   // 60s
+      SEER: 30000,     // 30s
+      WITCH: 30000,    // 30s
+      HUNTER: 3000,    // 3s
+      DAY: 0
+    };
+    function now() { return Date.now() + serverOffset; }
+    
     window.onload = () => {
       const savedRoom = localStorage.getItem('werewolf_room');
       const savedId = localStorage.getItem('werewolf_id');
@@ -138,26 +162,6 @@ firebase.database().ref('/.info/serverTimeOffset').on('value', s => {
         setupListeners(savedRoom);
       }
     };
-
-// --- PHASE / TIMER / VOICE ---
-let phase = { name: '', endsAt: 0, night: 0 };
-let serverOffset = 0;
-let timerInterval = null;
-let voiceOn = true;
-let lastPlayers = {}; // cache of players for action UIs
-
-const PHASES = ['NIGHTFALL', 'WOLVES', 'SEER', 'WITCH', 'HUNTER', 'DAY'];
-const PHASE_DUR_MS = {
-  NIGHTFALL: 3000,
-  WOLVES: 60000,   // 60s
-  SEER: 30000,     // 30s
-  WITCH: 30000,    // 30s
-  HUNTER: 3000,    // 3s
-  DAY: 0
-};
-
-function now() { return Date.now() + serverOffset; }
-``
 
     function createGame() {
       const code = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -227,314 +231,401 @@ function now() { return Date.now() + serverOffset; }
         updatePlayerUI(data.players);
       });
       
-// Listen for phase changes
-database.ref(`rooms/${code}/phase`).on('value', snap => {
-  phase = snap.val() || { name: '', endsAt: 0, night: 0 };
-  updatePhaseUI();
-});
+      // Listen for phase changes
+      database.ref(`rooms/${code}/phase`).on('value', snap => {
+        phase = snap.val() || { name: '', endsAt: 0, night: 0 };
+        updatePhaseUI();
+        bindActionsListener(); // watch players' confirmations & actions for early completion
+      });
 
     }
 
-    
-function updatePlayerUI(players) {
-  lastPlayers = players || {}; // <--- add this line
-
-  const listDiv = document.getElementById('playerList');
-  const hostDiv = document.getElementById('hostPlayerList');
-  listDiv.innerHTML = "<h4>Players Joined:</h4>";
-  hostDiv.innerHTML = "";
-  for (let id in players) {
-    const p = players[id];
-    listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
-      <span>Seat ${p.seat}: ${p.name}</span>
-    </div>`;
-    if (isHost) {
-      const roleDisplay = rolesVisible ? p.role : "???";
-      hostDiv.innerHTML += `<div class="player-row">
-        <span>${p.name} (${roleDisplay})</span>
-        <button class="btn-secondary" style="padding:5px;" onclick="toggleLife('${id}', '${p.status}')">
-          ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
-        </button>
-      </div>`;
-    }
-  }
-}
-
-
-function updatePhaseUI() {
-  // Phase label
-  const lbl = document.getElementById('phaseLabel');
-  const cd = document.getElementById('phaseCountdown');
-  if (lbl) lbl.innerText = phase.name ? `${phase.name} (N${phase.night || 0})` : '—';
-
-  // Timer
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  if (phase && phase.endsAt && phase.endsAt > 0) {
-    const tick = () => {
-      const remain = Math.max(0, Math.round((phase.endsAt - now()) / 1000));
-      if (cd) cd.innerText = `${remain}s`;
-      if (remain <= 0) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-        // Host auto-advances to next phase
-        if (isHost) setTimeout(() => advancePhase(), 300);
+    function updatePlayerUI(players) {
+      lastPlayers = players || {}; // <--- add this line
+      const listDiv = document.getElementById('playerList');
+      const hostDiv = document.getElementById('hostPlayerList');
+      listDiv.innerHTML = "<h4>Players Joined:</h4>";
+      hostDiv.innerHTML = "";
+      for (let id in players) {
+        const p = players[id];
+        listDiv.innerHTML += `<div class="player-row ${p.status === 'DEAD' ? 'dead' : ''}">
+          <span>Seat ${p.seat}: ${p.name}</span>
+        </div>`;
+        if (isHost) {
+          const roleDisplay = rolesVisible ? p.role : "???";
+          hostDiv.innerHTML += `<div class="player-row">
+            <span>${p.name} (${roleDisplay})</span>
+            <button class="btn-secondary" style="padding:5px;" onclick="toggleLife('${id}', '${p.status}')">
+              ${p.status === 'ALIVE' ? 'Kill' : 'Revive'}
+            </button>
+          </div>`;
+        }
       }
-    };
-    tick();
-    timerInterval = setInterval(tick, 250);
-  } else {
-    if (cd) cd.innerText = '—';
-  }
-
-  renderRoleActionPanel();
-}
-
-function toggleVoice() {
-  voiceOn = !voiceOn;
-  const el = document.getElementById('voiceState');
-  if (el) el.innerText = `Voice: ${voiceOn ? 'On' : 'Off'}`;
-}
-
-function announcePhase(name) {
-  if (!voiceOn || !('speechSynthesis' in window)) return;
-  const lines = {
-    NIGHTFALL: 'Night falls. Everyone close your eyes.',
-    WOLVES:    'Wolves, open your eyes and choose a victim.',
-    SEER:      'Seer, open your eyes and divine one player.',
-    WITCH:     'Witch, you may save or poison one player.',
-    HUNTER:    'Hunter, if you are dying, take your shot.',
-    DAY:       'Day breaks. Everyone open your eyes.'
-  };
-  const u = new SpeechSynthesisUtterance(lines[name] || name);
-  u.rate = 0.95; u.pitch = 1; u.lang = 'en-AU';
-  try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
-}
-
-    
-function setPhase(name, durMs, night) {
-  const endsAt = durMs > 0 ? now() + durMs : 0;
-  database.ref(`rooms/${currentRoom}/phase`).set({ name, night, endsAt });
-  if (isHost) announcePhase(name);
-}
-
-function startNight() {
-  if (!isHost) return;
-  const nextNight = (phase.night || 0) + 1;
-  setPhase('NIGHTFALL', PHASE_DUR_MS.NIGHTFALL, nextNight);
-}
-
-async function advancePhase() {
-  if (!isHost) return;
-  // Before moving on, resolve the current phase if needed:
-  if (phase.name === 'WOLVES') {
-    await computeWolvesVictim(phase.night);
-  } else if (phase.name === 'WITCH') {
-    // Resolve night deaths (save/poison) and set hunterPending if any
-    const hunterPending = await resolveNight(phase.night);
-    if (hunterPending) {
-      setPhase('HUNTER', PHASE_DUR_MS.HUNTER, phase.night);
-      return;
-    } else {
-      setPhase('DAY', PHASE_DUR_MS.DAY, phase.night);
-      return;
     }
-  } else if (phase.name === 'HUNTER') {
-    await resolveHunter(phase.night);
-    setPhase('DAY', PHASE_DUR_MS.DAY, phase.night);
-    return;
-  }
-
-  // Default move to the next phase in the sequence
-  const idx = Math.max(0, PHASES.indexOf(phase.name));
-  let next = PHASES[(idx + 1) % PHASES.length];
-  let night = phase.night || 1;
-
-  if (phase.name === 'DAY') { // Starting a new cycle
-    next = 'NIGHTFALL';
-    night += 1;
-  }
-
-  setPhase(next, PHASE_DUR_MS[next], night);
-}
-
-async function computeWolvesVictim(night) {
-  const snap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/wolves`).once('value');
-  const votes = snap.val() || {};
-  const tally = {};
-  Object.values(votes).forEach(t => { if (t) tally[t] = (tally[t] || 0) + 1; });
-
-  let victim = null, max = -1;
-  for (const [id, count] of Object.entries(tally)) {
-    if (count > max) { max = count; victim = id; }
-  }
-  await database.ref(`rooms/${currentRoom}/state`).update({ pendingVictim: victim || null });
-}
-
-async function resolveNight(night) {
-  const stateSnap = await database.ref(`rooms/${currentRoom}/state`).once('value');
-  const state = stateSnap.val() || {};
-  let victim = state.pendingVictim || null;
-
-  const witchSnap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/witch`).once('value');
-  const witch = witchSnap.val() || {};
-  if (witch.save === true) victim = null;
-
-  const poisonTarget = witch.poisonTarget || null;
-
-  // Determine if Hunter is among the dead this night
-  let hunterPending = null;
-  async function roleOf(id) {
-    if (!id) return null;
-    const r = await database.ref(`rooms/${currentRoom}/players/${id}/role`).once('value');
-    return r.val();
-  }
-  const victimRole = victim ? await roleOf(victim) : null;
-  const poisonRole = poisonTarget ? await roleOf(poisonTarget) : null;
-  if (victim && victimRole === 'HUNTER') hunterPending = victim;
-  if (poisonTarget && poisonRole === 'HUNTER') hunterPending = poisonTarget;
-
-  const updates = {};
-  if (victim) updates[`rooms/${currentRoom}/players/${victim}/status`] = 'DEAD';
-  if (poisonTarget) updates[`rooms/${currentRoom}/players/${poisonTarget}/status`] = 'DEAD';
-
-  if (Object.keys(updates).length) await database.ref().update(updates);
-  await database.ref(`rooms/${currentRoom}/state`).update({
-    pendingVictim: null,
-    lastNight: night,
-    hunterPending: hunterPending || null
-  });
-
-  return hunterPending;
-}
-
-async function resolveHunter(night) {
-  const actSnap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/hunter`).once('value');
-  const act = actSnap.val() || {};
-  const target = act.target;
-  if (target) {
-    await database.ref(`rooms/${currentRoom}/players/${target}/status`).set('DEAD');
-  }
-  await database.ref(`rooms/${currentRoom}/state/hunterPending`).set(null);
-}
-``
-
-function renderRoleActionPanel() {
-  const panel = document.getElementById('actionPanel');
-  if (!panel) return;
-
-  panel.innerHTML = '';
-  panel.classList.add('hidden');
-
-  const me = lastPlayers?.[myPlayerId];
-  if (!me || me.status === 'DEAD') return;
-
-  const aliveIds = Object.keys(lastPlayers).filter(id => lastPlayers[id].status === 'ALIVE');
-
-  // Wolves
-  if (phase.name === 'WOLVES' && me.role === 'WEREWOLF') {
-    panel.classList.remove('hidden');
-    panel.innerHTML = `
-      <h3>Wolves</h3>
-      <div class="small-note">Choose your victim (you can change your vote until the timer ends).</div>
-      <div class="role-action">
-        <select id="wolfTarget">
-          ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
-        </select>
-        <button onclick="submitWolfVote()">Vote</button>
-      </div>
-    `;
-  }
-
-  // Seer
-  if (phase.name === 'SEER' && me.role === 'SEER') {
-    panel.classList.remove('hidden');
-    panel.innerHTML = `
-      <h3>Seer</h3>
-      <div class="small-note">Divine exactly one player.</div>
-      <div class="role-action">
-        <select id="seerTarget">
-          ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
-        </select>
-        <button onclick="seerDivine()">Reveal</button>
-      </div>
-      <div id="seerResult" style="margin-top:6px;color:#4e9af1;"></div>
-    `;
-  }
-
-  // Witch
-  if (phase.name === 'WITCH' && me.role === 'WITCH') {
-    panel.classList.remove('hidden');
-    panel.innerHTML = `
-      <h3>Witch</h3>
-      <div class="small-note">You may save the wolves' victim or poison one player.</div>
-      <div class="role-action">
-        <button onclick="witchSave()">Save</button>
-        <button onclick="witchPoison()">Poison</button>
-      </div>
-      <div id="witchNote" class="small-note" style="margin-top:6px;"></div>
-      <div id="poisonUI" class="hidden" style="margin-top:6px;">
-        <select id="witchTarget">
-          ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
-        </select>
-        <button onclick="confirmWitchPoison()">Confirm Poison</button>
-      </div>
-    `;
-  }
-
-  // Hunter
-  if (phase.name === 'HUNTER' && me.role === 'HUNTER') {
-    panel.classList.remove('hidden');
-    panel.innerHTML = `
-      <h3>Hunter</h3>
-      <div class="small-note">You have very little time to shoot.</div>
-      <div class="role-action">
-        <select id="hunterTarget">
-          ${aliveIds.filter(id => id !== myPlayerId).map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
-        </select>
-        <button onclick="hunterShoot()">Shoot</button>
-      </div>
-    `;
-  }
-}
-
-// --- Action writers ---
-function submitWolfVote() {
-  const target = document.getElementById('wolfTarget').value;
-  database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/wolves/${myPlayerId}`).set(target);
-}
-
-function seerDivine() {
-  const target = document.getElementById('seerTarget').value;
-  const role = lastPlayers[target]?.role || 'Unknown';
-  database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/seer/${myPlayerId}`).set(target);
-  const res = document.getElementById('seerResult');
-  if (res) res.innerText = `${lastPlayers[target].name} is ${role}.`;
-}
-
-function witchSave() {
-  database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/witch/save`).set(true);
-  const note = document.getElementById('witchNote');
-  if (note) note.innerText = 'You chose to save the victim.';
-}
-
-function witchPoison() {
-  const ui = document.getElementById('poisonUI');
-  if (ui) ui.classList.remove('hidden');
-}
-
-function confirmWitchPoison() {
-  const t = document.getElementById('witchTarget').value;
-  database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/witch/poisonTarget`).set(t);
-  const note = document.getElementById('witchNote');
-  if (note) note.innerText = `You poisoned ${lastPlayers[t].name}.`;
-}
-
-function hunterShoot() {
-  const t = document.getElementById('hunterTarget').value;
-  database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/hunter`).set({ shooter: myPlayerId, target: t });
-}
-
     
+    function updatePhaseUI() {
+      // Phase label
+      const lbl = document.getElementById('phaseLabel');
+      const cd = document.getElementById('phaseCountdown');
+      if (lbl) lbl.innerText = phase.name ? `${phase.name} (N${phase.night || 0})` : '—';
+    
+      // Timer
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+      if (phase && phase.endsAt && phase.endsAt > 0) {
+        const tick = () => {
+          const remain = Math.max(0, Math.round((phase.endsAt - now()) / 1000));
+          if (cd) cd.innerText = `${remain}s`;
+          if (remain <= 0) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            // Host auto-advances to next phase
+            if (isHost) await tryAdvance(); // time's up -> advance
+          }
+        };
+        tick();
+        timerInterval = setInterval(tick, 250);
+      } else {
+        if (cd) cd.innerText = '—';
+      }
+      renderRoleActionPanel();
+    }
+    
+    function toggleVoice() {
+      voiceOn = !voiceOn;
+      const el = document.getElementById('voiceState');
+      if (el) el.innerText = `Voice: ${voiceOn ? 'On' : 'Off'}`;
+    }
+    
+    function announcePhase(name) {
+      if (!voiceOn || !('speechSynthesis' in window)) return;
+      const lines = {
+        NIGHTFALL: 'Night falls. Everyone close your eyes.',
+        WOLVES:    'Wolves, open your eyes and choose a victim.',
+        SEER:      'Seer, open your eyes and divine one player.',
+        WITCH:     'Witch, you may save or poison one player.',
+        HUNTER:    'Hunter, if you are dying, take your shot.',
+        DAY:       'Day breaks. Everyone open your eyes.'
+      };
+      const u = new SpeechSynthesisUtterance(lines[name] || name);
+      u.rate = 0.95; u.pitch = 1; u.lang = 'en-AU';
+      try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
+    }
+    
+        
+    function setPhase(name, durMs, night) {
+      resolvingLock = false;
+      const endsAt = durMs > 0 ? now() + durMs : 0;
+      database.ref(`rooms/${currentRoom}/phase`).set({ name, night, endsAt });
+      if (isHost) announcePhase(name);
+    }
+    
+    function startNight() {
+      if (!isHost) return;
+      const nextNight = (phase.night || 0) + 1;
+      setPhase('NIGHTFALL', PHASE_DUR_MS.NIGHTFALL, nextNight);
+    }
+    
+    async function isPhaseComplete() {
+      // Completion = required confirms exist for the current phase.
+      const night = phase.night;
+      if (!night) return false;
+    
+      const actSnap = await database.ref(`rooms/${currentRoom}/actions/night_${night}`).once('value');
+      const acts = actSnap.val() || {};
+    
+      // Build helper: count alive wolves
+      const playersSnap = await database.ref(`rooms/${currentRoom}/players`).once('value');
+      const players = playersSnap.val() || {};
+      const alive = Object.keys(players).filter(id => players[id].status === 'ALIVE');
+      const aliveWolves = alive.filter(id => players[id].role === 'WEREWOLF');
+    
+      if (phase.name === 'WOLVES') {
+        const conf = acts?.wolves?.confirm || {};
+        const votes = acts?.wolves?.votes || {};
+        const allConfirmed = aliveWolves.every(id => conf[id]);
+        const hasAtLeastOneVote = Object.keys(votes).length > 0;
+        return allConfirmed && hasAtLeastOneVote;
+      }
+      if (phase.name === 'SEER') {
+        const conf = acts?.seer?.confirm || {};
+        // Exactly one seer in deck (if present); consider complete when any seer confirms
+        return Object.keys(conf).length > 0;
+      }
+      if (phase.name === 'WITCH') {
+        const conf = acts?.witch?.confirm || {};
+        return Object.keys(conf).length > 0;
+      }
+      if (phase.name === 'HUNTER') {
+        const conf = acts?.hunter?.confirm || {};
+        return Object.keys(conf).length > 0;
+      }
+      if (phase.name === 'NIGHTFALL') {
+        // No action; allow early skip if needed (not required)
+        return false;
+      }
+      return false;
+    }
+
+    async function advancePhase() {
+      //if (!isHost) return;
+      // Before moving on, resolve the current phase if needed:
+      if (phase.name === 'WOLVES') {
+        await computeWolvesVictim(phase.night);
+      } else if (phase.name === 'WITCH') {
+        // Resolve night deaths (save/poison) and set hunterPending if any
+        const hunterPending = await resolveNight(phase.night);
+        if (hunterPending) {
+          setPhase('HUNTER', PHASE_DUR_MS.HUNTER, phase.night);
+          return;
+        } else {
+          setPhase('DAY', PHASE_DUR_MS.DAY, phase.night);
+          return;
+        }
+      } else if (phase.name === 'HUNTER') {
+        await resolveHunter(phase.night);
+        setPhase('DAY', PHASE_DUR_MS.DAY, phase.night);
+        return;
+      }
+    
+      // Default move to the next phase in the sequence
+      const idx = Math.max(0, PHASES.indexOf(phase.name));
+      let next = PHASES[(idx + 1) % PHASES.length];
+      let night = phase.night || 1;
+      
+      if (phase.name === 'NIGHTFALL') next = 'WOLVES';
+      if (phase.name === 'DAY') { // Starting a new cycle
+        next = 'NIGHTFALL';
+        night += 1;
+      }
+    
+      setPhase(next, PHASE_DUR_MS[next], night);
+    }
+    
+    async function computeWolvesVictim(night) {
+      const snap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/wolves`).once('value');
+      const votes = snap.val() || {};
+      const tally = {};
+      Object.values(votes).forEach(t => { if (t) tally[t] = (tally[t] || 0) + 1; });
+    
+      let victim = null, max = -1;
+      for (const [id, count] of Object.entries(tally)) {
+        if (count > max) { max = count; victim = id; }
+      }
+      await database.ref(`rooms/${currentRoom}/state`).update({ pendingVictim: victim || null });
+    }
+    
+    async function resolveNight(night) {
+      const stateSnap = await database.ref(`rooms/${currentRoom}/state`).once('value');
+      const state = stateSnap.val() || {};
+      let victim = state.pendingVictim || null;
+    
+      const witchSnap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/witch`).once('value');
+      const witch = witchSnap.val() || {};
+      if (witch.save === true) victim = null;
+    
+      const poisonTarget = witch.poisonTarget || null;
+    
+      // Determine if Hunter is among the dead this night
+      let hunterPending = null;
+      async function roleOf(id) {
+        if (!id) return null;
+        const r = await database.ref(`rooms/${currentRoom}/players/${id}/role`).once('value');
+        return r.val();
+      }
+      const victimRole = victim ? await roleOf(victim) : null;
+      const poisonRole = poisonTarget ? await roleOf(poisonTarget) : null;
+      if (victim && victimRole === 'HUNTER') hunterPending = victim;
+      if (poisonTarget && poisonRole === 'HUNTER') hunterPending = poisonTarget;
+    
+      const updates = {};
+      if (victim) updates[`rooms/${currentRoom}/players/${victim}/status`] = 'DEAD';
+      if (poisonTarget) updates[`rooms/${currentRoom}/players/${poisonTarget}/status`] = 'DEAD';
+    
+      if (Object.keys(updates).length) await database.ref().update(updates);
+      await database.ref(`rooms/${currentRoom}/state`).update({
+        pendingVictim: null,
+        lastNight: night,
+        hunterPending: hunterPending || null
+      });
+    
+      return hunterPending;
+    }
+    
+    async function resolveHunter(night) {
+      const actSnap = await database.ref(`rooms/${currentRoom}/actions/night_${night}/hunter`).once('value');
+      const act = actSnap.val() || {};
+      const target = act.target;
+      if (target) {
+        await database.ref(`rooms/${currentRoom}/players/${target}/status`).set('DEAD');
+      }
+      await database.ref(`rooms/${currentRoom}/state/hunterPending`).set(null);
+    }
+    
+    function bindActionsListener() {
+      if (actionRef) { actionRef.off(); actionRef = null; }
+      if (!currentRoom || !phase?.night) return;
+    
+      // Watch all actions for this night
+      actionRef = database.ref(`rooms/${currentRoom}/actions/night_${phase.night}`);
+      actionRef.on('value', async (snap) => {
+        if (!isHost) return;
+        await tryAdvance(true); // check if we can advance early (on confirmations)
+      });
+    }
+    
+    async function tryAdvance(early=false) {
+      if (resolvingLock) return;
+      // Only host advances
+      if (!isHost) return;
+    
+      // If early==true, only advance when role confirms; if timer==0, advance regardless.
+      if (early) {
+        const complete = await isPhaseComplete();
+        if (!complete) return;
+      }
+    
+      resolvingLock = true;
+      await advancePhase(); // internal advance with resolution logic
+      resolvingLock = false;
+    }
+    
+    function renderRoleActionPanel() {
+      const panel = document.getElementById('actionPanel');
+      if (!panel) return;
+      panel.innerHTML = '';
+      panel.classList.add('hidden');
+    
+      const me = lastPlayers?.[myPlayerId];
+      if (!me || me.status === 'DEAD') return;
+    
+      const aliveIds = Object.keys(lastPlayers).filter(id => lastPlayers[id].status === 'ALIVE');
+    
+      // Wolves
+      if (phase.name === 'WOLVES' && me.role === 'WEREWOLF') {
+        panel.classList.remove('hidden');
+        panel.innerHTML = `
+          <h3>Wolves</h3>
+          <div class="small-note">Choose a victim, then Confirm.</div>
+          <div class="role-action">
+            <select id="wolfTarget">
+              ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
+            </select>
+            <button onclick="submitWolfVote()">Vote</button>
+            <button onclick="confirmRoleDone()">Confirm</button>
+          </div>
+        `;
+      }
+    
+      // Seer
+      if (phase.name === 'SEER' && me.role === 'SEER') {
+        panel.classList.remove('hidden');
+        panel.innerHTML = `
+          <h3>Seer</h3>
+          <div class="small-note">Reveal one player, then Confirm (or Skip).</div>
+          <div class="role-action">
+            <select id="seerTarget">
+              ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
+            </select>
+            <button onclick="seerDivine()">Reveal</button>
+            <button onclick="confirmRoleDone()">Confirm</button>
+            <button onclick="confirmRoleSkip()">Skip & Confirm</button>
+          </div>
+          <div id="seerResult" style="margin-top:6px;color:#4e9af1;"></div>
+        `;
+      }
+    
+      // Witch
+      if (phase.name === 'WITCH' && me.role === 'WITCH') {
+        panel.classList.remove('hidden');
+        panel.innerHTML = `
+          <h3>Witch</h3>
+          <div class="small-note">Save the victim, poison someone, or do nothing. Then Confirm.</div>
+          <div class="role-action">
+            <button onclick="witchSave()">Save</button>
+            <button onclick="witchPoison()">Poison</button>
+            <button onclick="witchNone()">Do Nothing</button>
+          </div>
+          <div id="witchNote" class="small-note" style="margin-top:6px;"></div>
+          <div id="poisonUI" class="hidden" style="margin-top:6px;">
+            <select id="witchTarget">
+              ${aliveIds.map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
+            </select>
+            <button onclick="confirmWitchPoison()">Confirm Poison</button>
+          </div>
+          <div class="role-action">
+            <button onclick="confirmRoleDone()">Confirm</button>
+          </div>
+        `;
+      }
+    
+      // Hunter
+      if (phase.name === 'HUNTER' && me.role === 'HUNTER') {
+        panel.classList.remove('hidden');
+        panel.innerHTML = `
+          <h3>Hunter</h3>
+          <div class="small-note">Shoot quickly or skip, then Confirm.</div>
+          <div class="role-action">
+            <select id="hunterTarget">
+              ${aliveIds.filter(id => id !== myPlayerId).map(id => `<option value="${id}">${lastPlayers[id].name}</option>`).join('')}
+            </select>
+            <button onclick="hunterShoot()">Shoot</button>
+            <button onclick="confirmRoleSkip()">Skip</button>
+            <button onclick="confirmRoleDone()">Confirm</button>
+          </div>
+        `;
+      }
+    }
+    
+    // --- Action writers ---
+    function submitWolfVote() {
+      const target = document.getElementById('wolfTarget').value;
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/wolves/${myPlayerId}`).set(target);
+    }
+    
+    function confirmRoleDone() {
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/${phase.name.toLowerCase()}/confirm/${myPlayerId}`).set(true);
+    }
+    
+    function confirmRoleSkip() {
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/${phase.name.toLowerCase()}/skip/${myPlayerId}`).set(true);
+      confirmRoleDone();
+    }
+    
+    function seerDivine() {
+      const target = document.getElementById('seerTarget').value;
+      const role = lastPlayers[target]?.role || 'Unknown';
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/seer/${myPlayerId}`).set(target);
+      const res = document.getElementById('seerResult');
+      if (res) res.innerText = `${lastPlayers[target].name} is ${role}.`;
+    }
+    
+    function witchSave() {
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/witch/save`).set(true);
+      const note = document.getElementById('witchNote');
+      if (note) note.innerText = 'You chose to save the victim.';
+    }
+    
+    function witchPoison() {
+      const ui = document.getElementById('poisonUI');
+      if (ui) ui.classList.remove('hidden');
+    }
+    
+    function confirmWitchPoison() {
+      const t = document.getElementById('witchTarget').value;
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/witch/poisonTarget`).set(t);
+      const note = document.getElementById('witchNote');
+      if (note) note.innerText = `You poisoned ${lastPlayers[t].name}.`;
+    }
+    
+    function witchNone() {
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/witch/none`).set(true);
+    }
+    
+    function hunterShoot() {
+      const t = document.getElementById('hunterTarget').value;
+      database.ref(`rooms/${currentRoom}/actions/night_${phase.night}/hunter`).set({ shooter: myPlayerId, target: t });
+    }
+
     function toggleRoleVisibility() {
       rolesVisible = !rolesVisible;
       database.ref(`rooms/${currentRoom}/players`).once('value', (snap) => updatePlayerUI(snap.val()));
@@ -585,38 +676,34 @@ function hunterShoot() {
       });
     }
 
+    function showRole() {
+        const card = document.getElementById("myRoleCard");
+        card.innerText = currentRole;
+        card.style.background =
+            currentRole === "WEREWOLF" ? "#e94560" : "#4e9af1";
+    }
     
-
-function showRole() {
-    const card = document.getElementById("myRoleCard");
-    card.innerText = currentRole;
-    card.style.background =
-        currentRole === "WEREWOLF" ? "#e94560" : "#4e9af1";
-}
-
-function hideRole() {
-    const card = document.getElementById("myRoleCard");
-    card.innerText = "TAP & HOLD";
-    card.style.background = "#0f3460";
-}
-
-function setupRoleCardEvents() {
-    const card = document.getElementById("myRoleCard");
-
-    // Mouse events
-    card.addEventListener("mousedown", showRole);
-    card.addEventListener("mouseup", hideRole);
-    card.addEventListener("mouseleave", hideRole);
-
-    // Touch events
-    card.addEventListener("touchstart", showRole);
-    card.addEventListener("touchend", hideRole);
-    card.addEventListener("touchcancel", hideRole);
-}
-
-window.addEventListener("load", setupRoleCardEvents);
-
-
+    function hideRole() {
+        const card = document.getElementById("myRoleCard");
+        card.innerText = "TAP & HOLD";
+        card.style.background = "#0f3460";
+    }
+    
+    function setupRoleCardEvents() {
+        const card = document.getElementById("myRoleCard");
+    
+        // Mouse events
+        card.addEventListener("mousedown", showRole);
+        card.addEventListener("mouseup", hideRole);
+        card.addEventListener("mouseleave", hideRole);
+    
+        // Touch events
+        card.addEventListener("touchstart", showRole);
+        card.addEventListener("touchend", hideRole);
+        card.addEventListener("touchcancel", hideRole);
+    }
+    
+    window.addEventListener("load", setupRoleCardEvents);
 
     function leaveGame() {
       if (confirm("Leave game?")) {
