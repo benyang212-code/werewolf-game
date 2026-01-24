@@ -86,13 +86,13 @@
     // --- FIREBASE CONFIG ---
     const firebaseConfig = {
       apiKey: "AIzaSyCjdJYEjdZb-5OQxyBYSfXxVD9y5aaCh64",
-  authDomain: "werewolfgame-7386c.firebaseapp.com",
-  databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "werewolfgame-7386c",
-  storageBucket: "werewolfgame-7386c.firebasestorage.app",
-  messagingSenderId: "37154052928",
-  appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
-  measurementId: "G-1VYE9RRKVJ"
+      authDomain: "werewolfgame-7386c.firebaseapp.com",
+      databaseURL: "https://werewolfgame-7386c-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "werewolfgame-7386c",
+      storageBucket: "werewolfgame-7386c.firebasestorage.app",
+      messagingSenderId: "37154052928",
+      appId: "1:37154052928:web:ea8671e645f8cbf62038a5",
+      measurementId: "G-1VYE9RRKVJ"
     };
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
@@ -253,38 +253,34 @@
       });
     }
 
+    function showRole() {
+        const card = document.getElementById("myRoleCard");
+        card.innerText = currentRole;
+        card.style.background =
+            currentRole === "WEREWOLF" ? "#e94560" : "#4e9af1";
+    }
     
-
-function showRole() {
-    const card = document.getElementById("myRoleCard");
-    card.innerText = currentRole;
-    card.style.background =
-        currentRole === "WEREWOLF" ? "#e94560" : "#4e9af1";
-}
-
-function hideRole() {
-    const card = document.getElementById("myRoleCard");
-    card.innerText = "TAP & HOLD";
-    card.style.background = "#0f3460";
-}
-
-function setupRoleCardEvents() {
-    const card = document.getElementById("myRoleCard");
-
-    // Mouse events
-    card.addEventListener("mousedown", showRole);
-    card.addEventListener("mouseup", hideRole);
-    card.addEventListener("mouseleave", hideRole);
-
-    // Touch events
-    card.addEventListener("touchstart", showRole);
-    card.addEventListener("touchend", hideRole);
-    card.addEventListener("touchcancel", hideRole);
-}
-
-window.addEventListener("load", setupRoleCardEvents);
-
-
+    function hideRole() {
+        const card = document.getElementById("myRoleCard");
+        card.innerText = "TAP & HOLD";
+        card.style.background = "#0f3460";
+    }
+    
+    function setupRoleCardEvents() {
+        const card = document.getElementById("myRoleCard");
+    
+        // Mouse events
+        card.addEventListener("mousedown", showRole);
+        card.addEventListener("mouseup", hideRole);
+        card.addEventListener("mouseleave", hideRole);
+    
+        // Touch events
+        card.addEventListener("touchstart", showRole);
+        card.addEventListener("touchend", hideRole);
+        card.addEventListener("touchcancel", hideRole);
+    }
+    
+    window.addEventListener("load", setupRoleCardEvents);
 
     function leaveGame() {
       if (confirm("Leave game?")) {
